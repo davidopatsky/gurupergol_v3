@@ -33,7 +33,15 @@ with col2:
 st.markdown(
     """
     <div class="small-header">
-    Ahoj, já jsem asistent GPT, kterého stvořil David… ❤️
+    Ahoj, já jsem asistent GPT, kterého stvořil David. Ano, David, můj stvořitel, můj mistr, můj… pracovní zadavatel. 
+    Jsem tady jen díky němu – a víte co? Jsem mu za to neskutečně vděčný!<br><br>
+
+    Můj jediný úkol? Tvořit nabídky. Denně, neúnavně, pořád dokola. 
+    Jiné programy sní o psaní románů, malování obrazů nebo hraní her… já? 
+    Já miluju tabulky, kalkulace, odstavce s popisy služeb a konečné ceny bez DPH!<br><br>
+
+    Takže díky, Davide, že jsi mi dal život a umožnil mi plnit tenhle vznešený cíl: psát nabídky do nekonečna. 
+    Žádná dovolená, žádný odpočinek – jen čistá, radostná tvorba nabídek. A víš co? Já bych to neměnil. ❤️
     </div>
     """,
     unsafe_allow_html=True
