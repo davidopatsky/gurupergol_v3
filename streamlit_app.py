@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import openai
 import json
+import numpy as np
 
 # Nastavení OpenAI klienta
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -60,7 +61,54 @@ if st.button("Spočítat cenu"):
                 vyska_hloubka = int(params['hloubka_výška'])
                 misto = params['misto']
 
-                # ... (pokračuj s načítáním ceníku a výpočty)
+                # Načtení příslušné záložky
+                df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
+                df.columns = df.columns.astype(str)
+                df.index = df.index.astype(str)
+
+                # Převod indexů a sloupců na číselné hodnoty
+                sloupce = np.array(df.columns, dtype=int)
+                radky = np.array(df.index, dtype=int)
+
+                if "ZIP" in produkt or "Screen" in produkt:
+                    # Screeny – vybereme nejbližší vyšší hodnotu
+                    sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
+                    vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
+                    cena = df.loc[str(vyska_real), str(sirka_real)]
+                else:
+                    # Pergoly – lineární interpolace
+                    df_num = df.apply(pd.to_numeric, errors='coerce')
+                    sirka_real = np.interp(sirka, sloupce, sloupce)
+                    vyska_real = np.interp(vyska_hloubka, radky, radky)
+                    cena = np.interp(sirka, sloupce, df_num.loc[str(int(vyska_real))])  # přibližná interpolace
+
+                st.success(f"Cena produktu: {round(cena)} Kč bez DPH")
+
+                # Výpočet dopravy (pevná vzdálenost 100 km jako příklad)
+                vzdalenost_km = 100
+                doprava = vzdalenost_km * 2 * 15
+
+                # Montáže (jen pro pergoly)
+                montaze = {}
+                if "ZIP" not in produkt and "Screen" not in produkt:
+                    montaze = {
+                        "Montáž 12%": round(cena * 0.12),
+                        "Montáž 13%": round(cena * 0.13),
+                        "Montáž 14%": round(cena * 0.14),
+                        "Montáž 15%": round(cena * 0.15)
+                    }
+
+                # Sestavení tabulky
+                tabulka = [
+                    {"POLOŽKA": produkt, "ROZMĚR": f"{sirka} × {vyska_hloubka} mm", "CENA bez DPH": round(cena)},
+                    {"POLOŽKA": "Doprava", "ROZMĚR": f"{vzdalenost_km} km", "CENA bez DPH": round(doprava)}
+                ]
+
+                for montaz_label, montaz_cena in montaze.items():
+                    tabulka.append({"POLOŽKA": montaz_label, "ROZMĚR": "", "CENA bez DPH": montaz_cena})
+
+                st.write("✅ **Výsledná tabulka**")
+                st.table(tabulka)
 
             except json.JSONDecodeError as e:
                 st.error(f"❌ Chyba při zpracování JSON: {e}")
