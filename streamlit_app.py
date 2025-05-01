@@ -81,6 +81,7 @@ with col_main:
                     sloupce = np.array(df.columns, dtype=int)
                     radky = np.array(df.index, dtype=int)
 
+
                     debug_text += f"Dostupné šířky: {sloupce}\n"
                     debug_text += f"Dostupné výšky/hloubky: {radky}\n"
 
