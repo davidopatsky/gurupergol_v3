@@ -106,7 +106,15 @@ with col_main:
                     else:
                         # Pergoly – lineární interpolace
                         df_num = df.apply(pd.to_numeric, errors='coerce')
-                        vyska_row = df_num.loc[str(min(radky, key=lambda x: abs(x - vyska_hloubka)))]
+                        # Převést index na int (pokud není)
+                        df_num.index = pd.to_numeric(df_num.index, errors='coerce')
+
+            # Najít nejbližší výšku
+    nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
+
+# Vybrat řádek přímo přes číselný index
+            vyska_row = df_num.loc[nejblizsi_vyska]
+
                         cena = np.interp(sirka, sloupce, vyska_row)
                         debug_text += f"Interpolovaná cena: {cena}\n"
 
