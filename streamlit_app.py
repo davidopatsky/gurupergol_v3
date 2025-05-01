@@ -108,11 +108,16 @@ def process_input(user_input):
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": (
-                    f"Tvůj úkol: z následujícího textu vytáhni produkty s názvem, šířkou, výškou/hloubkou a místem dodání. "
-                    f"Vyber z: {', '.join(sheet_names)}. Pokud je 'screen', přiřaď k produktu 'screen'. "
-                    f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek. "
-                    f"Pokud nic nenajdeš, vrať {{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}."
-                )},
+            f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý jako položku se 4 klíči: "
+            f"'produkt', 'šířka', 'hloubka_výška', 'misto'. "
+            f"Výsledek VŽDY vrať jako JSON SEZNAM, nikoli jako slovník. "
+            f"Příklad: [{{'produkt': 'screen', 'šířka': 2500, 'hloubka_výška': null, 'misto': null}}]. "
+            f"Vyber produkt co nejpřesněji z: {', '.join(sheet_names)}. "
+            f"Pokud uživatel napíše slovo jako 'screen', 'screenová roleta', 'boční screen', VŽDY použij název 'screen'. "
+            f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek a použij ho jako finální hodnotu. "
+            f"Pokud žádný produkt neodpovídá, vrať: [{{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}]."
+        )}
+
                 {"role": "user", "content": user_input}
             ],
             max_tokens=1000
