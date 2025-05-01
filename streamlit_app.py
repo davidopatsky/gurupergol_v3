@@ -119,15 +119,22 @@ def process_input(user_input):
         )
         content = response.choices[0].message.content.strip()
 
-        start_idx = min(content.find('['), content.find('{'))
+        start_idx = content.find('{') if '{' in content else content.find('[')
         if start_idx == -1:
             raise ValueError(f"❌ GPT nevrátil platný JSON blok. Obsah:\n{content}")
-
+        
         json_block = content[start_idx:]
-        parsed = json.loads(json_block)
+        try:
+            parsed = json.loads(json_block)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"❌ Nepodařilo se načíst JSON: {e}\nObsah:\n{json_block}")
+        
+        # Pokud přišlo jako dict, převedeme na seznam
         if isinstance(parsed, dict):
             parsed = [{"produkt": k, **v} for k, v in parsed.items()]
+        
         products = parsed
+
 
         all_rows = []
         produkt_map = {
