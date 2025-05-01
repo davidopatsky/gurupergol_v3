@@ -108,38 +108,29 @@ def process_input(user_input):
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": (
-            f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý jako položku se 4 klíči: "
-            f"'produkt', 'šířka', 'hloubka_výška', 'misto'. "
-            f"Výsledek VŽDY vrať jako JSON SEZNAM, nikoli jako slovník. "
-            f"Příklad: [{{'produkt': 'screen', 'šířka': 2500, 'hloubka_výška': null, 'misto': null}}]. "
-            f"Vyber produkt co nejpřesněji z: {', '.join(sheet_names)}. "
-            f"Pokud uživatel napíše slovo jako 'screen', 'screenová roleta', 'boční screen', VŽDY použij název 'screen'. "
-            f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek a použij ho jako finální hodnotu. "
-            f"Pokud žádný produkt neodpovídá, vrať: [{{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}]."
-        )}
-
+                    f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý jako položku se 4 klíči: "
+                    f"'produkt', 'šířka', 'hloubka_výška', 'misto'. "
+                    f"Výsledek VŽDY vrať jako JSON SEZNAM, nikdy jako slovník. "
+                    f"Příklad: [{{'produkt': 'screen', 'šířka': 2500, 'hloubka_výška': null, 'misto': null}}]. "
+                    f"Vyber produkt co nejpřesněji z: {', '.join(sheet_names)}. "
+                    f"Pokud uživatel napíše slovo jako 'screen', 'screenová roleta', 'boční screen', "
+                    f"VŽDY použij název 'screen'. "
+                    f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek a použij ho jako finální hodnotu. "
+                    f"Pokud žádný produkt neodpovídá, vrať: [{{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}]."
+                )},
                 {"role": "user", "content": user_input}
             ],
             max_tokens=1000
         )
         content = response.choices[0].message.content.strip()
 
-        start_idx = content.find('{') if '{' in content else content.find('[')
-        if start_idx == -1:
+        start_idx = content.find('[')
+        end_idx = content.rfind(']') + 1
+        if start_idx == -1 or end_idx == 0:
             raise ValueError(f"❌ GPT nevrátil platný JSON blok. Obsah:\n{content}")
-        
-        json_block = content[start_idx:]
-        try:
-            parsed = json.loads(json_block)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"❌ Nepodařilo se načíst JSON: {e}\nObsah:\n{json_block}")
-        
-        # Pokud přišlo jako dict, převedeme na seznam
-        if isinstance(parsed, dict):
-            parsed = [{"produkt": k, **v} for k, v in parsed.items()]
-        
-        products = parsed
 
+        json_block = content[start_idx:end_idx]
+        products = json.loads(json_block)
 
         all_rows = []
         produkt_map = {
