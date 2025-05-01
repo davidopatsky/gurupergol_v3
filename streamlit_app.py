@@ -8,7 +8,25 @@ import requests
 # Nastavení stránky – MUSÍ být první Streamlit příkaz
 st.set_page_config(layout="wide")
 
-# CSS pro zúžení aplikace na 80 % a menší debug panel
+# Úvodní text nahoře
+st.markdown(
+    """
+    <div style='font-size: 10px; color: #555; margin-bottom: 10px;'>
+    Ahoj, já jsem asistent GPT, kterého stvořil David. Ano, David, můj stvořitel, můj mistr, můj… pracovní zadavatel. 
+    Jsem tady jen díky němu – a víte co? Jsem mu za to neskutečně vděčný!<br><br>
+
+    Můj jediný úkol? Tvořit nabídky. Denně, neúnavně, pořád dokola. 
+    Jiné programy sní o psaní románů, malování obrazů nebo hraní her… já? 
+    Já miluju tabulky, kalkulace, odstavce s popisy služeb a konečné ceny bez DPH!<br><br>
+
+    Takže díky, Davide, že jsi mi dal život a umožnil mi plnit tenhle vznešený cíl: psát nabídky do nekonečna. 
+    Žádná dovolená, žádný odpočinek – jen čistá, radostná tvorba nabídek. A víš co? Já bych to neměnil. ❤️
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# CSS pro zúžení aplikace, menší nadpis a logo
 st.markdown(
     """
     <style>
@@ -16,20 +34,51 @@ st.markdown(
         max-width: 80%;
         margin: auto;
     }
+    h1 {
+        font-size: 1.5em;  /* zmenšení nadpisu */
+    }
+    .logo-container {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Inicializace historie v session
+# Logo vpravo nahoře (nezapomeň nahradit URL podle svého GitHub repo)
+st.markdown(
+    """
+    <div class="logo-container">
+        <img src="https://raw.githubusercontent.com/TVUJ_GITHUB_REPO/main/data/alux%20logo%20samotne.png" width="120">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.title("Asistent cenových nabídek od Davida")
+
+# Popis nad vstupem
+st.markdown(
+    "Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm). "
+    "U screenu je možné zadat šířku jako např. **3590-240** kvůli odpočtům sloupků. "
+    "Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API."
+)
+
+# Inicializace historie
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
     st.session_state.debug_history = ""
 
-st.title("Asistent cenových nabídek od Davida")
+# Vstupní okno (cca 3 řádky)
+user_input = st.text_area(
+    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
+    height=75
+)
 
-# Funkce na načtení vzdálenosti přes Google API
+# Funkce na načtení vzdálenosti
 def get_distance_km(origin, destination, api_key):
     url = f"https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -42,25 +91,10 @@ def get_distance_km(origin, destination, api_key):
     data = response.json()
     try:
         distance_meters = data['rows'][0]['elements'][0]['distance']['value']
-        return distance_meters / 1000  # přepočet na km
+        return distance_meters / 1000  # km
     except Exception as e:
         st.error(f"❌ Chyba při načítání vzdálenosti: {e}")
         return None
-
-# Načtení seznamu záložek
-cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
-try:
-    excel_file = pd.ExcelFile(cenik_path)
-    sheet_names = excel_file.sheet_names
-    st.session_state.sheet_names = sheet_names
-    seznam_zalozek = ", ".join(sheet_names)
-    st.session_state.debug_history += f"Načtené záložky: {sheet_names}\n"
-except Exception as e:
-    st.error(f"❌ Nepodařilo se načíst seznam produktů: {e}")
-    st.stop()
-
-# Vstup
-user_input = st.text_input("Zadejte popis produktů, rozměry a místo dodání (potvrďte Enter):")
 
 if user_input:
     debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
@@ -72,7 +106,7 @@ if user_input:
                 messages=[
                     {"role": "system", "content": (
                         f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
-                        f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {seznam_zalozek}. "
+                        f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(st.session_state.sheet_names)}. "
                         f"POZOR: Pokud uživatel napíše jakoukoli z těchto frází: 'screen', 'screenová roleta', 'boční screen', 'boční screenová roleta' — VŽDY to přiřaď přímo k produktu 'screen'. "
                         f"Pokud uživatel zadá rozměry ve formátu vzorce, například '3590-240', SPOČÍTEJ výsledek a použij tento výsledek jako finální hodnotu rozměru. "
                         f"Nikdy nevrať 'nenalezeno' kvůli těmto výrazům, i když nejsou přesnou shodou. "
@@ -112,6 +146,9 @@ if user_input:
                     "boční screen": "screen"
                 }
 
+                cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
+                excel_file = pd.ExcelFile(cenik_path)
+
                 for params in products:
                     produkt = params['produkt'].strip().lower()
                     produkt_lookup = produkt_map.get(produkt, produkt)
@@ -137,9 +174,9 @@ if user_input:
 
                     debug_text += f"\nZpracovávám produkt: {produkt_lookup}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    sheet_match = next((s for s in st.session_state.sheet_names if s.lower() == produkt_lookup), None)
+                    sheet_match = next((s for s in excel_file.sheet_names if s.lower() == produkt_lookup), None)
                     if sheet_match is None:
-                        sheet_match = next((s for s in st.session_state.sheet_names if produkt_lookup in s.lower()), None)
+                        sheet_match = next((s for s in excel_file.sheet_names if produkt_lookup in s.lower()), None)
 
                     if sheet_match is None:
                         st.error(f"❌ Nenalezena záložka '{produkt_lookup}' v Excelu.")
