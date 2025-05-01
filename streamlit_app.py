@@ -22,6 +22,7 @@ cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
 try:
     excel_file = pd.ExcelFile(cenik_path)
     sheet_names = excel_file.sheet_names
+    st.session_state.sheet_names = sheet_names  # uložíme do session
     seznam_zalozek = ", ".join(sheet_names)
     st.session_state.debug_history += f"Načtené záložky: {sheet_names}\n"
 except Exception as e:
@@ -104,18 +105,15 @@ if st.button("Spočítat cenu"):
 
                         debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                        # Najdeme správný název záložky (bez ohledu na velikost písmen)
-                            sheet_match = next((s for s in sheet_names if s.lower() == produkt.lower()), None)
-                            if sheet_match is None:
-                                st.error(f"❌ Nenalezena záložka '{produkt}' v Excelu. Zkontrolujte názvy.")
-                                debug_text += f"Chyba: nenalezena záložka '{produkt}'\n"
-                                continue  # přeskočíme tento produkt
-                            
-                            # Načteme příslušnou záložku
-                            df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
+                        # Najdeme správnou záložku bez ohledu na velká/malá písmena
+                        sheet_match = next((s for s in st.session_state.sheet_names if s.lower() == produkt.lower()), None)
+                        if sheet_match is None:
+                            st.error(f"❌ Nenalezena záložka '{produkt}' v Excelu. Zkontrolujte názvy.")
+                            debug_text += f"Chyba: nenalezena záložka '{produkt}'\n"
+                            continue
 
-
-
+                        # Načteme příslušnou záložku
+                        df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
 
                         # Vyčistíme sloupce (šířky)
                         sloupce_ciste = []
