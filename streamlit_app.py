@@ -144,23 +144,29 @@ if st.button("Spočítat cenu"):
                                 continue
                         radky = sorted(radky_ciste)
 
-                        debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
-
-                        # Najdeme nejbližší vyšší nebo největší dostupnou hodnotu
                         # 🔍 Debug výpis dostupných hodnot
                         debug_text += f"DEBUG - Všechny sloupce (šířky): {sloupce}\n"
                         debug_text += f"DEBUG - Všechny řádky (výšky/hloubky): {radky}\n"
                         debug_text += f"DEBUG - Požadovaná šířka: {sirka}, požadovaná výška/hloubka: {vyska_hloubka}\n"
-                        
+
                         # Najdeme nejbližší vyšší nebo největší dostupnou hodnotu
                         sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                         vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-                        
+
                         debug_text += f"DEBUG - Vybraná šířka (nejbližší vyšší/největší): {sirka_real}\n"
-                        debug_text += f"_
+                        debug_text += f"DEBUG - Vybraná výška/hloubka (nejbližší vyšší/největší): {vyska_real}\n"
 
+                        try:
+                            cena = df.loc[vyska_real, sirka_real]
+                        except KeyError:
+                            try:
+                                cena = df.loc[str(vyska_real), str(sirka_real)]
+                            except KeyError:
+                                st.error(f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}")
+                                debug_text += f"❌ Chyba: nenalezena cena pro {sirka_real} × {vyska_real}\n"
+                                continue
 
-                        debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
+                        debug_text += f"✅ Nalezená cena: {cena}\n"
 
                         all_rows.append({
                             "POLOŽKA": produkt_lookup,
@@ -183,12 +189,10 @@ if st.button("Spočítat cenu"):
                                     "CENA bez DPH": montaz_cena
                                 })
 
-                    # Připravíme výsledek jako text do debug panelu
                     result_text = "\n".join([f"{row['POLOŽKA']}: {row['ROZMĚR']} → {row['CENA bez DPH']} Kč"
                                              for row in all_rows])
                     debug_text += f"\n📤 **Výsledek aplikace:**\n{result_text}\n---\n"
 
-                    # Uložíme výsledek nahoru do historie
                     st.session_state.vysledky.insert(0, all_rows)
                     st.session_state.debug_history += debug_text
 
