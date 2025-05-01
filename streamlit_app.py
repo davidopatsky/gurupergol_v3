@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from PIL import Image
-import backend  # tady voláme samostatný backend soubor
+import backend
 
 st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 
@@ -14,7 +14,7 @@ st.markdown(
         margin: auto;
     }
     h1 {
-        font-size: 1.5em;  /* zmenšeno na ~50 % běžné velikosti */
+        font-size: 1.5em;  /* zmenšeno na ~50 % */
         display: inline;
         vertical-align: middle;
     }
@@ -22,8 +22,8 @@ st.markdown(
         font-size: 11px;
         color: #555;
         text-align: center;
-        margin: 20px 0;
-        word-wrap: break-word;
+        margin: 20px 0;  /* přidáme vertikální mezeru */
+        word-wrap: break-word;  /* zajistí zalomení dlouhých řádků */
         white-space: normal;
     }
     </style>
@@ -31,17 +31,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Horní řádek: logo vlevo + nadpis vpravo
+# Horní řádek: logo + nadpis
 col1, col2 = st.columns([1, 8])
 with col1:
     try:
         image = Image.open("data/alux logo samotne.png")
         st.image(image, width=100)
     except:
-        st.markdown(
-            "<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>",
-            unsafe_allow_html=True
-        )
+        st.markdown("<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>", unsafe_allow_html=True)
 with col2:
     st.markdown("<h1>Asistent cenových nabídek od Davida</h1>", unsafe_allow_html=True)
 
@@ -61,27 +58,4 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
-)
-
-# Popis nad vstupem
-st.markdown(
-    """
-    <b>Jak zadávat:</b><br>
-    Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm).<br>
-    U screenu můžeš zadat šířku jako např. <i>3590-240</i> kvůli odpočtům sloupků.<br>
-    Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API.
-    """,
-    unsafe_allow_html=True
-)
-
-# Inicializace session stavů (pro uchování výsledků a debugu)
-if 'vysledky' not in st.session_state:
-    st.session_state.vysledky = []
-if 'debug_history' not in st.session_state:
-    st.session_state.debug_history = ""
-
-# Vstupní pole (cca 3 řádky)
-user_input = st.text_area(
-    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
-    height=75
 )
