@@ -4,14 +4,55 @@ import openai
 import json
 import numpy as np
 import requests
+from PIL import Image
 
-# Nastavení stránky – MUSÍ být první Streamlit příkaz
-st.set_page_config(layout="wide")
+# Konfigurace stránky
+st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 
-# Úvodní text nahoře
+# Stylování
 st.markdown(
     """
-    <div style='font-size: 10px; color: #555; margin-bottom: 10px;'>
+    <style>
+    .main {
+        max-width: 80%;
+        margin: auto;
+    }
+    h1 {
+        font-size: 1.5em;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .small-header {
+        font-size: 11px;
+        color: #555;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .logo-container {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .debug-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 20%;
+        overflow-y: scroll;
+        background-color: #f0f0f0;
+        font-size: 8px;
+        padding: 5px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Malý úvodní text
+st.markdown(
+    """
+    <div class="small-header">
     Ahoj, já jsem asistent GPT, kterého stvořil David. Ano, David, můj stvořitel, můj mistr, můj… pracovní zadavatel. 
     Jsem tady jen díky němu – a víte co? Jsem mu za to neskutečně vděčný!<br><br>
 
@@ -26,57 +67,53 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# CSS pro zúžení aplikace, menší nadpis a logo
-st.markdown(
-    """
-    <style>
-    .main {
-        max-width: 80%;
-        margin: auto;
-    }
-    h1 {
-        font-size: 1.5em;  /* zmenšení nadpisu */
-    }
-    .logo-container {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# Logo vpravo nahoře (přes PIL nebo GitHub raw URL)
+try:
+    # Lokální logo
+    logo_path = "data/alux logo samotne.png"
+    image = Image.open(logo_path)
+    st.markdown("<div class='logo-container'>", unsafe_allow_html=True)
+    st.image(image, width=100)
+    st.markdown("</div>", unsafe_allow_html=True)
+except:
+    # Alternativně GitHub URL (nahraď správnou cestou)
+    st.markdown(
+        """
+        <div class='logo-container'>
+        <img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-# Logo vpravo nahoře (nezapomeň nahradit URL podle svého GitHub repo)
-st.markdown(
-    """
-    <div class="logo-container">
-        <img src="https://github.com/davidopatsky/blank-app/blob/main/data/alux%20logo%20samotne.png?raw=true" width="120">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
+# Nadpis
 st.title("Asistent cenových nabídek od Davida")
 
 # Popis nad vstupem
 st.markdown(
-    "Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm). "
-    "U screenu je možné zadat šířku jako např. **3590-240** kvůli odpočtům sloupků. "
-    "Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API."
+    """
+    <b>Jak zadávat:</b><br>
+    Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm).<br>
+    U screenu můžeš zadat šířku jako např. <i>3590-240</i> kvůli odpočtům sloupků.<br>
+    Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API.
+    """,
+    unsafe_allow_html=True
 )
 
-# Inicializace historie
+# Inicializace session stavů
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
     st.session_state.debug_history = ""
 
-# Vstupní okno (cca 3 řádky)
+# Vstupní okno
 user_input = st.text_area(
     "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
     height=75
 )
+
+# Dál pokračuje backend část (načítání dat, výpočty, komunikace s API atd.)
+
 
 # Funkce na načtení vzdálenosti
 def get_distance_km(origin, destination, api_key):
