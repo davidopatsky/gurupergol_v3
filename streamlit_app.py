@@ -75,11 +75,30 @@ with col_main:
 
                     # Načtení příslušné záložky
                     df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
-                    df.columns = df.columns.astype(str)
-                    df.index = df.index.astype(str)
+                    # Načtení příslušné záložky
+df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
 
-                    sloupce = np.array(df.columns, dtype=int)
-                    radky = np.array(df.index, dtype=int)
+# Vyčistíme sloupce (šířky) → použijeme jen ty, které jdou bezpečně převést na číslo
+sloupce_ciste = []
+for col in df.columns:
+    try:
+        sloupce_ciste.append(int(float(col)))
+    except (ValueError, TypeError):
+        continue  # přeskočíme "Unnamed" nebo cokoli, co není číslo
+sloupce = np.array(sloupce_ciste)
+
+# Vyčistíme indexy (výšky/hloubky) → použijeme jen ty, které jdou bezpečně převést na číslo
+radky_ciste = []
+for idx in df.index:
+    try:
+        radky_ciste.append(int(float(idx)))
+    except (ValueError, TypeError):
+        continue
+radky = np.array(radky_ciste)
+
+debug_text += f"Čisté šířky (sloupce): {sloupce}\n"
+debug_text += f"Čisté výšky/hloubky (indexy): {radky}\n"
+
 
 
                     debug_text += f"Dostupné šířky: {sloupce}\n"
