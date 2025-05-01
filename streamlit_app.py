@@ -75,34 +75,27 @@ with col_main:
 
                     # Načtení příslušné záložky
                     df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
-                    # Načtení příslušné záložky
-df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
 
-# Vyčistíme sloupce (šířky) → použijeme jen ty, které jdou bezpečně převést na číslo
-sloupce_ciste = []
-for col in df.columns:
-    try:
-        sloupce_ciste.append(int(float(col)))
-    except (ValueError, TypeError):
-        continue  # přeskočíme "Unnamed" nebo cokoli, co není číslo
-sloupce = np.array(sloupce_ciste)
+                    # Vyčistíme sloupce (šířky)
+                    sloupce_ciste = []
+                    for col in df.columns:
+                        try:
+                            sloupce_ciste.append(int(float(col)))
+                        except (ValueError, TypeError):
+                            continue
+                    sloupce = np.array(sloupce_ciste)
 
-# Vyčistíme indexy (výšky/hloubky) → použijeme jen ty, které jdou bezpečně převést na číslo
-radky_ciste = []
-for idx in df.index:
-    try:
-        radky_ciste.append(int(float(idx)))
-    except (ValueError, TypeError):
-        continue
-radky = np.array(radky_ciste)
+                    # Vyčistíme indexy (výšky/hloubky)
+                    radky_ciste = []
+                    for idx in df.index:
+                        try:
+                            radky_ciste.append(int(float(idx)))
+                        except (ValueError, TypeError):
+                            continue
+                    radky = np.array(radky_ciste)
 
-debug_text += f"Čisté šířky (sloupce): {sloupce}\n"
-debug_text += f"Čisté výšky/hloubky (indexy): {radky}\n"
-
-
-
-                    debug_text += f"Dostupné šířky: {sloupce}\n"
-                    debug_text += f"Dostupné výšky/hloubky: {radky}\n"
+                    debug_text += f"Čisté šířky (sloupce): {sloupce}\n"
+                    debug_text += f"Čisté výšky/hloubky (indexy): {radky}\n"
 
                     if "ZIP" in produkt or "Screen" in produkt:
                         # Screeny – nejbližší vyšší hodnoty
