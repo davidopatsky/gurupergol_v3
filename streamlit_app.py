@@ -51,7 +51,7 @@ st.markdown(
 st.markdown(
     """
     <div class="logo-container">
-        <img src="https://github.com/davidopatsky/blank-app/blob/92b4dd670de1e01daf127b22c911bbe96b03da25/data/alux%20logo%20samotne.png" width="120">
+        <img src="https://github.com/davidopatsky/blank-app/blob/main/data/alux%20logo%20samotne.png?raw=true" width="120">
     </div>
     """,
     unsafe_allow_html=True
