@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import openai
 import json
-import numpy as np
 import requests
 from PIL import Image
 
@@ -13,32 +12,10 @@ st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 st.markdown(
     """
     <style>
-    .main {
-        max-width: 80%;
-        margin: auto;
-    }
-    h1 {
-        font-size: 1.5em;
-        display: inline;
-        vertical-align: middle;
-    }
-    .small-header {
-        font-size: 11px;
-        color: #555;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .debug-panel {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 20%;
-        overflow-y: scroll;
-        background-color: #f0f0f0;
-        font-size: 8px;
-        padding: 5px;
-    }
+    .main { max-width: 80%; margin: auto; }
+    h1 { font-size: 1.1em; display: inline; vertical-align: middle; }  /* zmenšeno na 75% */
+    .small-header { font-size: 22px; color: #555; text-align: center; margin: 20px 0; word-wrap: break-word; white-space: normal; } /* zvětšeno 200% */
+    .debug-panel { position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; background-color: #f0f0f0; font-size: 8px; padding: 5px; }
     </style>
     """,
     unsafe_allow_html=True
@@ -48,16 +25,15 @@ st.markdown(
 col1, col2 = st.columns([1, 8])
 with col1:
     try:
-        logo_path = "data/alux logo samotne.png"
-        image = Image.open(logo_path)
-        st.image(image, width=100)
+        image = Image.open("data/alux logo samotne.png")
+        st.image(image, width=150)  # zvětšeno na 150%
     except:
         st.markdown(
-            "<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>",
+            "<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='150'>",
             unsafe_allow_html=True
         )
 with col2:
-    st.title("Asistent cenových nabídek od Davida")
+    st.markdown("<h1>Asistent cenových nabídek od Davida</h1>", unsafe_allow_html=True)
 
 # === Úvodní text ===
 st.markdown(
@@ -93,22 +69,13 @@ if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
     st.session_state.debug_history = ""
-
-# === Vstupní pole ===
-user_input = st.text_area(
-    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
-    height=75
-)
+if 'processing' not in st.session_state:
+    st.session_state.processing = False
 
 # === Funkce na výpočet vzdálenosti ===
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {
-        'origins': origin,
-        'destinations': destination,
-        'key': api_key,
-        'units': 'metric'
-    }
+    params = {'origins': origin, 'destinations': destination, 'key': api_key, 'units': 'metric'}
     response = requests.get(url, params=params)
     data = response.json()
     try:
@@ -118,8 +85,10 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při načítání vzdálenosti: {e}")
         return None
 
-# === Backend logika ===
-if user_input:
+# === Funkce zpracování vstupu ===
+def process_input():
+    user_input = st.session_state.user_input
+    st.session_state.processing = True
     debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
     try:
         cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
@@ -131,100 +100,64 @@ if user_input:
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": (
-                    f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
-                    f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(sheet_names)}. "
-                    f"POZOR: Pokud uživatel napíše jakoukoli z těchto frází: 'screen', 'screenová roleta', 'boční screen', 'boční screenová roleta' — VŽDY to přiřaď přímo k produktu 'screen'. "
-                    f"Pokud uživatel zadá rozměry ve formátu vzorce, například '3590-240', SPOČÍTEJ výsledek a použij tento výsledek jako finální hodnotu rozměru. "
-                    f"Nikdy nevrať 'nenalezeno' kvůli těmto výrazům, i když nejsou přesnou shodou. "
-                    f"Pokud žádný jiný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
-                    f"Vrať výsledek POUZE jako platný JSON seznam položek."
+                    f"Tvůj úkol: z následujícího textu vytáhni produkty s názvem, šířkou, výškou/hloubkou a místem dodání. "
+                    f"Vyber z: {', '.join(sheet_names)}. Pokud je 'screen', přiřaď k produktu 'screen'. "
+                    f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek. "
+                    f"Pokud nic nenajdeš, vrať {{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}."
                 )},
                 {"role": "user", "content": user_input}
             ],
             max_tokens=1000
         )
+        content = response.choices[0].message.content.strip()
 
-        gpt_output_raw = response.choices[0].message.content.strip()
-        debug_text += f"GPT RAW odpověď:\n{gpt_output_raw}\n"
+        start_idx = content.find('[')
+        end_idx = content.rfind(']') + 1
+        if start_idx == -1 or end_idx == 0:
+            raise ValueError(f"❌ GPT nevrátil platný JSON blok. Obsah:\n{content}")
 
-        start_idx = gpt_output_raw.find('[')
-        end_idx = gpt_output_raw.rfind(']') + 1
-        gpt_output_clean = gpt_output_raw[start_idx:end_idx]
-        debug_text += f"GPT čistý JSON blok:\n{gpt_output_clean}\n"
-
-        products = json.loads(gpt_output_clean)
+        json_block = content[start_idx:end_idx]
+        products = json.loads(json_block)
         all_rows = []
+        produkt_map = {
+            "alux screen": "screen", "alux screen 1": "screen", "screen": "screen",
+            "screenova roleta": "screen", "screenová roleta": "screen",
+            "boční screenová roleta": "screen", "boční screen": "screen"
+        }
 
         if products and 'nenalezeno' in products[0]:
             zprava = products[0].get('zprava', 'Produkt nenalezen.')
             st.warning(f"❗ {zprava}")
             debug_text += f"⚠ {zprava}\n"
         else:
-            produkt_map = {
-                "alux screen": "screen",
-                "alux screen 1": "screen",
-                "screen": "screen",
-                "screenova roleta": "screen",
-                "screenová roleta": "screen",
-                "boční screenová roleta": "screen",
-                "boční screen": "screen"
-            }
-
             for params in products:
-                produkt = params['produkt'].strip().lower()
-                produkt_lookup = produkt_map.get(produkt, produkt)
+                produkt = produkt_map.get(params['produkt'].strip().lower(), params['produkt'].strip().lower())
                 misto = params['misto']
+                sirka = int(float(params['šířka']))
+                vyska_hloubka = int(float(params['hloubka_výška'])) if params['hloubka_výška'] else (2500 if 'screen' in produkt else None)
 
-                try:
-                    sirka = int(float(params['šířka']))
-                except (ValueError, TypeError):
-                    st.error(f"❌ Chybí rozměr (šířka) pro produkt {produkt}")
-                    continue
-
-                if params['hloubka_výška'] is None:
-                    vyska_hloubka = 2500 if "screen" in produkt_lookup else None
-                    if vyska_hloubka is None:
-                        st.error(f"❌ Chybí rozměr (výška/hloubka) pro produkt {produkt}")
-                        continue
-                else:
-                    try:
-                        vyska_hloubka = int(float(params['hloubka_výška']))
-                    except (ValueError, TypeError):
-                        st.error(f"❌ Chybí rozměr (výška/hloubka) pro produkt {produkt}")
-                        continue
-
-                debug_text += f"\nZpracovávám produkt: {produkt_lookup}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
-
-                sheet_match = next((s for s in sheet_names if s.lower() == produkt_lookup), None)
-                if sheet_match is None:
-                    sheet_match = next((s for s in sheet_names if produkt_lookup in s.lower()), None)
-
-                if sheet_match is None:
-                    st.error(f"❌ Nenalezena záložka '{produkt_lookup}' v Excelu.")
-                    debug_text += f"Chyba: nenalezena záložka '{produkt_lookup}'\n"
+                sheet_match = next((s for s in sheet_names if s.lower() == produkt), None)
+                if not sheet_match:
+                    sheet_match = next((s for s in sheet_names if produkt in s.lower()), None)
+                if not sheet_match:
+                    st.error(f"❌ Nenalezena záložka '{produkt}' v Excelu.")
+                    debug_text += f"Chyba: nenalezena záložka '{produkt}'\n"
                     continue
 
                 df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
                 sloupce = sorted([int(float(c)) for c in df.columns if str(c).isdigit()])
                 radky = sorted([int(float(r)) for r in df.index if str(r).isdigit()])
-
                 sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                 vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-
-                try:
-                    cena = df.loc[vyska_real, sirka_real]
-                except KeyError:
-                    st.error(f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}")
-                    debug_text += f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}\n"
-                    continue
+                cena = df.loc[vyska_real, sirka_real]
 
                 all_rows.append({
-                    "POLOŽKA": produkt_lookup,
+                    "POLOŽKA": produkt,
                     "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
                     "CENA bez DPH": round(cena)
                 })
 
-                if "screen" not in produkt_lookup:
+                if "screen" not in produkt:
                     for perc in [12, 13, 14, 15]:
                         all_rows.append({
                             "POLOŽKA": f"Montáž {perc}%",
@@ -233,8 +166,7 @@ if user_input:
                         })
 
                 if misto:
-                    api_key = st.secrets["GOOGLE_API_KEY"]
-                    distance_km = get_distance_km("Blučina, Czechia", misto, api_key)
+                    distance_km = get_distance_km("Blučina, Czechia", misto, st.secrets["GOOGLE_API_KEY"])
                     if distance_km:
                         doprava_cena = distance_km * 2 * 15
                         all_rows.append({
@@ -250,6 +182,19 @@ if user_input:
         debug_text += f"Exception: {e}\n"
 
     st.session_state.debug_history += debug_text
+    st.session_state.processing = False
+
+# === Vstupní pole s Enter ===
+st.text_area(
+    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
+    key="user_input",
+    height=75,
+    on_change=process_input
+)
+
+# === Indikátor zpracování ===
+if st.session_state.processing:
+    st.info("⏳ Zpracovávám vstup…")
 
 # === Výsledky ===
 for idx, vysledek in enumerate(st.session_state.vysledky):
