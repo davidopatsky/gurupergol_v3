@@ -43,10 +43,15 @@ if st.button("Spočítat cenu"):
                     messages=[
                         {"role": "system", "content": (
                             f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, "
-                            f"šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. Název produktu vybírej "
-                            f"tak, aby co nejvíce odpovídal jednomu z následujících produktů: {seznam_zalozek}. "
-                            f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani "
-                            f"vysvětlení. Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}, ...]."
+f"šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
+f"Pokud uživatel napíše jen obecné slovo jako 'screen', přiřaď to k produktu 'ALUX Screen'. "
+f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {seznam_zalozek}. "
+f"Pokud žádný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou pro uživatele, "
+f"že produkt nebyl nalezen a je třeba upřesnit název. "
+f"Vrať výsledek POUZE jako platný JSON seznam položek. "
+f"Nepřidávej žádný úvod ani vysvětlení. "
+f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo "
+f"[{{\"nenalezeno\": true, \"zprava\": \"produkt nenalezen, prosím o upřesnění názvu produktu\"}}]."
                         )},
                         {"role": "user", "content": user_input}
                     ],
