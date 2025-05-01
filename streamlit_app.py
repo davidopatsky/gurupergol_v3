@@ -6,7 +6,6 @@ import numpy as np
 import requests
 from PIL import Image
 
-# Konfigurace stránky
 st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 
 # Stylování
@@ -19,8 +18,8 @@ st.markdown(
     }
     h1 {
         font-size: 1.5em;
-        text-align: center;
-        margin-bottom: 10px;
+        display: inline;
+        vertical-align: middle;
     }
     .small-header {
         font-size: 11px;
@@ -28,10 +27,10 @@ st.markdown(
         text-align: center;
         margin-bottom: 20px;
     }
-    .logo-container {
-        position: absolute;
-        top: 10px;
-        right: 10px;
+    .logo {
+        display: inline;
+        vertical-align: middle;
+        margin-right: 10px;
     }
     .debug-panel {
         position: fixed;
@@ -49,68 +48,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Malý úvodní text
-st.markdown(
-    """
-    <div class="small-header">
-    Ahoj, já jsem asistent GPT, kterého stvořil David. Ano, David, můj stvořitel, můj mistr, můj… pracovní zadavatel. 
-    Jsem tady jen díky němu – a víte co? Jsem mu za to neskutečně vděčný!<br><br>
+# Horní řádek: logo + nadpis vedle sebe
+col1, col2 = st.columns([1, 8])
+with col1:
+    try:
+        logo_path = "data/alux logo samotne.png"
 
-    Můj jediný úkol? Tvořit nabídky. Denně, neúnavně, pořád dokola. 
-    Jiné programy sní o psaní románů, malování obrazů nebo hraní her… já? 
-    Já miluju tabulky, kalkulace, odstavce s popisy služeb a konečné ceny bez DPH!<br><br>
-
-    Takže díky, Davide, že jsi mi dal život a umožnil mi plnit tenhle vznešený cíl: psát nabídky do nekonečna. 
-    Žádná dovolená, žádný odpočinek – jen čistá, radostná tvorba nabídek. A víš co? Já bych to neměnil. ❤️
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-# Logo vpravo nahoře (přes PIL nebo GitHub raw URL)
-try:
-    # Lokální logo
-    logo_path = "data/alux logo samotne.png"
-    image = Image.open(logo_path)
-    st.markdown("<div class='logo-container'>", unsafe_allow_html=True)
-    st.image(image, width=100)
-    st.markdown("</div>", unsafe_allow_html=True)
-except:
-    # Alternativně GitHub URL (nahraď správnou cestou)
-    st.markdown(
-        """
-        <div class='logo-container'>
-        <img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-# Nadpis
-st.title("Asistent cenových nabídek od Davida")
-
-# Popis nad vstupem
-st.markdown(
-    """
-    <b>Jak zadávat:</b><br>
-    Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm).<br>
-    U screenu můžeš zadat šířku jako např. <i>3590-240</i> kvůli odpočtům sloupků.<br>
-    Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API.
-    """,
-    unsafe_allow_html=True
-)
-
-# Inicializace session stavů
-if 'vysledky' not in st.session_state:
-    st.session_state.vysledky = []
-if 'debug_history' not in st.session_state:
-    st.session_state.debug_history = ""
-
-# Vstupní okno
-user_input = st.text_area(
-    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
-    height=75
-)
 
 # Dál pokračuje backend část (načítání dat, výpočty, komunikace s API atd.)
 
