@@ -147,15 +147,18 @@ if st.button("Spočítat cenu"):
                         debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
 
                         # Najdeme nejbližší vyšší nebo největší dostupnou hodnotu
+                        # 🔍 Debug výpis dostupných hodnot
+                        debug_text += f"DEBUG - Všechny sloupce (šířky): {sloupce}\n"
+                        debug_text += f"DEBUG - Všechny řádky (výšky/hloubky): {radky}\n"
+                        debug_text += f"DEBUG - Požadovaná šířka: {sirka}, požadovaná výška/hloubka: {vyska_hloubka}\n"
+                        
+                        # Najdeme nejbližší vyšší nebo největší dostupnou hodnotu
                         sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                         vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
+                        
+                        debug_text += f"DEBUG - Vybraná šířka (nejbližší vyšší/největší): {sirka_real}\n"
+                        debug_text += f"_
 
-                        try:
-                            cena = df.loc[str(vyska_real), str(sirka_real)]
-                        except KeyError:
-                            st.error(f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}")
-                            debug_text += f"Chyba: nenalezena cena pro {sirka_real} × {vyska_real}\n"
-                            continue
 
                         debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
 
