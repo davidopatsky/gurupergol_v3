@@ -44,11 +44,11 @@ if st.button("Spočítat cenu"):
                     messages=[
                         {"role": "system", "content": (
                             f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
-f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {seznam_zalozek}. "
-f"Pokud uživatel použije obecné výrazy jako 'screen', 'screenová roleta', 'boční screen', 'boční screenová roleta', přiřaď je přímo k produktu 'screen'. "
-f"Pokud žádný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
-f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani vysvětlení. "
-f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"produkt nenalezen, prosím o upřesnění názvu produktu\"}}]."
+                            f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {seznam_zalozek}. "
+                            f"Pokud uživatel použije obecné výrazy jako 'screen', 'screenová roleta', 'boční screen', 'boční screenová roleta', přiřaď je přímo k produktu 'screen'. "
+                            f"Pokud žádný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
+                            f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani vysvětlení. "
+                            f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"produkt nenalezen, prosím o upřesnění názvu produktu\"}}]."
                         )},
                         {"role": "user", "content": user_input}
                     ],
@@ -80,7 +80,8 @@ f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ...,
                         "screen": "screen",
                         "screenova roleta": "screen",
                         "screenová roleta": "screen",
-                        "boční screenová roleta": "screen"
+                        "boční screenová roleta": "screen",
+                        "boční screen": "screen"
                     }
 
                     for params in products:
@@ -132,7 +133,7 @@ f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ...,
                                 sloupce_ciste.append(int(float(col)))
                             except (ValueError, TypeError):
                                 continue
-                        sloupce = np.array(sloupce_ciste)
+                        sloupce = sorted(sloupce_ciste)
 
                         # Vyčistíme indexy (výšky/hloubky)
                         radky_ciste = []
@@ -141,24 +142,22 @@ f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ...,
                                 radky_ciste.append(int(float(idx)))
                             except (ValueError, TypeError):
                                 continue
-                        radky = np.array(radky_ciste)
+                        radky = sorted(radky_ciste)
 
                         debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
 
-                        if "zip" in produkt_lookup or "screen" in produkt_lookup:
-                            # Screeny – nejbližší vyšší hodnoty
-                            sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
-                            vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
+                        # Najdeme nejbližší vyšší nebo největší dostupnou hodnotu
+                        sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
+                        vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
+
+                        try:
                             cena = df.loc[str(vyska_real), str(sirka_real)]
-                            debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
-                        else:
-                            # Pergoly – lineární interpolace
-                            df_num = df.apply(pd.to_numeric, errors='coerce')
-                            df_num.index = pd.to_numeric(df_num.index, errors='coerce')
-                            nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
-                            vyska_row = df_num.loc[nejblizsi_vyska]
-                            cena = np.interp(sirka, sloupce, vyska_row)
-                            debug_text += f"Interpolovaná cena: {cena}\n"
+                        except KeyError:
+                            st.error(f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}")
+                            debug_text += f"Chyba: nenalezena cena pro {sirka_real} × {vyska_real}\n"
+                            continue
+
+                        debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
 
                         all_rows.append({
                             "POLOŽKA": produkt_lookup,
