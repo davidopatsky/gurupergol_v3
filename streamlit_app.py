@@ -67,9 +67,29 @@ if st.button("Spočítat cenu"):
 
                 for params in products:
                     produkt = params['produkt']
-                    sirka = int(float(params['šířka']))
-                    vyska_hloubka = int(float(params['hloubka_výška']))
                     misto = params['misto']
+
+                    # Ověření a převod šířky
+                    try:
+                        sirka = int(float(params['šířka']))
+                    except (ValueError, TypeError):
+                        st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (šířka) pro produkt {produkt}")
+                        continue
+
+                    # Ověření a převod výšky/hloubky
+                    if params['hloubka_výška'] is None:
+                        if "ZIP" in produkt or "Screen" in produkt:
+                            vyska_hloubka = 2500  # výchozí hodnota pro screeny
+                            debug_text += f"Použita výchozí výška pro screen: {vyska_hloubka} mm\n"
+                        else:
+                            st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
+                            continue
+                    else:
+                        try:
+                            vyska_hloubka = int(float(params['hloubka_výška']))
+                        except (ValueError, TypeError):
+                            st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
+                            continue
 
                     debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
