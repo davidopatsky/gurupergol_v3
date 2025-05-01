@@ -34,7 +34,7 @@ if st.button("Spočítat cenu"):
     if not user_input.strip():
         st.warning("Prosím, zadejte vstupní text.")
     else:
-        debug_text = ""
+        debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
         with st.spinner("Analyzuji vstup přes ChatGPT..."):
             try:
                 # Dotaz na GPT-4-turbo
@@ -152,9 +152,14 @@ if st.button("Spočítat cenu"):
                                 "CENA bez DPH": montaz_cena
                             })
 
+                # Připravíme výsledek jako text do debug panelu
+                result_text = "\n".join([f"{row['POLOŽKA']}: {row['ROZMĚR']} → {row['CENA bez DPH']} Kč"
+                                         for row in all_rows])
+                debug_text += f"\n📤 **Výsledek aplikace:**\n{result_text}\n---\n"
+
                 # Uložíme výsledek nahoru do historie
                 st.session_state.vysledky.insert(0, all_rows)
-                st.session_state.debug_history += debug_text + "\n"
+                st.session_state.debug_history += debug_text
 
             except json.JSONDecodeError as e:
                 st.error(f"❌ Chyba při zpracování JSON: {e}")
