@@ -38,19 +38,18 @@ if st.button("Spočítat cenu"):
         debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
         with st.spinner("Analyzuji vstup přes ChatGPT..."):
             try:
-                # Dotaz na GPT-4-turbo
+                # Dotaz na GPT-4-turbo s aktuálními názvy záložek
                 response = client.chat.completions.create(
                     model="gpt-4-turbo",
                     messages=[
                         {"role": "system", "content": (
                             f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, "
                             f"šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
-                            f"Pokud uživatel napíše jen obecné slovo jako 'screen', přiřaď to k produktu 'ALUX Screen'. "
                             f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {seznam_zalozek}. "
-                            f"Pokud žádný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou "
-                            f"pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
-                            f"Vrať výsledek POUZE jako platný JSON seznam položek. "
-                            f"Nepřidávej žádný úvod ani vysvětlení. "
+                            f"Pokud uživatel použije jen obecný název jako 'screen' nebo 'screenová roleta', přiřaď to "
+                            f"ke správnému produktu ze seznamu. Pokud žádný produkt neodpovídá, vrať položku s klíčem "
+                            f"'nenalezeno': true a zprávou pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
+                            f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani vysvětlení. "
                             f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] "
                             f"nebo [{{\"nenalezeno\": true, \"zprava\": \"produkt nenalezen, prosím o upřesnění názvu produktu\"}}]."
                         )},
@@ -77,8 +76,19 @@ if st.button("Spočítat cenu"):
                     debug_text += f"⚠ {zprava}\n"
                     st.session_state.debug_history += debug_text
                 else:
+                    # Mapování aliasů na záložky
+                    produkt_map = {
+                        "alux screen": "screen",
+                        "alux screen 1": "screen",
+                        "screen": "screen",
+                        "screenova roleta": "screen",
+                        "screenová roleta": "screen",
+                        "boční screenová roleta": "screen"
+                    }
+
                     for params in products:
-                        produkt = params['produkt']
+                        produkt = params['produkt'].strip().lower()
+                        produkt_lookup = produkt_map.get(produkt, produkt)
                         misto = params['misto']
 
                         # Ověření a převod šířky
@@ -90,7 +100,7 @@ if st.button("Spočítat cenu"):
 
                         # Ověření a převod výšky/hloubky
                         if params['hloubka_výška'] is None:
-                            if "ZIP" in produkt or "Screen" in produkt:
+                            if "zip" in produkt_lookup or "screen" in produkt_lookup:
                                 vyska_hloubka = 2500  # výchozí hodnota pro screeny
                                 debug_text += f"Použita výchozí výška pro screen: {vyska_hloubka} mm\n"
                             else:
@@ -103,13 +113,16 @@ if st.button("Spočítat cenu"):
                                 st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
                                 continue
 
-                        debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
+                        debug_text += f"\nZpracovávám produkt: {produkt_lookup}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                        # Najdeme správnou záložku bez ohledu na velká/malá písmena
-                        sheet_match = next((s for s in st.session_state.sheet_names if s.lower() == produkt.lower()), None)
+                        # Najdeme správnou záložku
+                        sheet_match = next((s for s in st.session_state.sheet_names if s.lower() == produkt_lookup), None)
                         if sheet_match is None:
-                            st.error(f"❌ Nenalezena záložka '{produkt}' v Excelu. Zkontrolujte názvy.")
-                            debug_text += f"Chyba: nenalezena záložka '{produkt}'\n"
+                            sheet_match = next((s for s in st.session_state.sheet_names if produkt_lookup in s.lower()), None)
+
+                        if sheet_match is None:
+                            st.error(f"❌ Nenalezena záložka '{produkt_lookup}' v Excelu. Zkontrolujte názvy.")
+                            debug_text += f"Chyba: nenalezena záložka '{produkt_lookup}'\n"
                             continue
 
                         # Načteme příslušnou záložku
@@ -135,7 +148,7 @@ if st.button("Spočítat cenu"):
 
                         debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
 
-                        if "ZIP" in produkt or "Screen" in produkt:
+                        if "zip" in produkt_lookup or "screen" in produkt_lookup:
                             # Screeny – nejbližší vyšší hodnoty
                             sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
                             vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
@@ -151,13 +164,13 @@ if st.button("Spočítat cenu"):
                             debug_text += f"Interpolovaná cena: {cena}\n"
 
                         all_rows.append({
-                            "POLOŽKA": produkt,
+                            "POLOŽKA": produkt_lookup,
                             "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
                             "CENA bez DPH": round(cena)
                         })
 
                         # Montáže (jen pro pergoly)
-                        if "ZIP" not in produkt and "Screen" not in produkt:
+                        if "zip" not in produkt_lookup and "screen" not in produkt_lookup:
                             montaze = {
                                 "Montáž 12%": round(cena * 0.12),
                                 "Montáž 13%": round(cena * 0.13),
