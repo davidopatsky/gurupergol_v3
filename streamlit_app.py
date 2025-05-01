@@ -174,9 +174,11 @@ for idx, vysledek in enumerate(st.session_state.vysledky):
     st.table(vysledek)
 
 # Debug panel dole (vodorovně)
+# Debug panel dole (vodorovně, zvětšený na 35 % výšky)
 st.markdown(
-    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 5%; overflow-y: scroll; "
+    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 35%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 5px;'>"
     f"<pre>{st.session_state.debug_history}</pre></div>",
     unsafe_allow_html=True
 )
+
