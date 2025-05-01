@@ -75,103 +75,102 @@ if st.button("Spočítat cenu"):
                     st.warning(f"❗ {zprava}")
                     debug_text += f"⚠ {zprava}\n"
                     st.session_state.debug_history += debug_text
-                    continue  # přeskočíme další zpracování
+                else:
+                    for params in products:
+                        produkt = params['produkt']
+                        misto = params['misto']
 
-                for params in products:
-                    produkt = params['produkt']
-                    misto = params['misto']
+                        # Ověření a převod šířky
+                        try:
+                            sirka = int(float(params['šířka']))
+                        except (ValueError, TypeError):
+                            st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (šířka) pro produkt {produkt}")
+                            continue
 
-                    # Ověření a převod šířky
-                    try:
-                        sirka = int(float(params['šířka']))
-                    except (ValueError, TypeError):
-                        st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (šířka) pro produkt {produkt}")
-                        continue
-
-                    # Ověření a převod výšky/hloubky
-                    if params['hloubka_výška'] is None:
-                        if "ZIP" in produkt or "Screen" in produkt:
-                            vyska_hloubka = 2500  # výchozí hodnota pro screeny
-                            debug_text += f"Použita výchozí výška pro screen: {vyska_hloubka} mm\n"
+                        # Ověření a převod výšky/hloubky
+                        if params['hloubka_výška'] is None:
+                            if "ZIP" in produkt or "Screen" in produkt:
+                                vyska_hloubka = 2500  # výchozí hodnota pro screeny
+                                debug_text += f"Použita výchozí výška pro screen: {vyska_hloubka} mm\n"
+                            else:
+                                st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
+                                continue
                         else:
-                            st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
-                            continue
-                    else:
-                        try:
-                            vyska_hloubka = int(float(params['hloubka_výška']))
-                        except (ValueError, TypeError):
-                            st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
-                            continue
+                            try:
+                                vyska_hloubka = int(float(params['hloubka_výška']))
+                            except (ValueError, TypeError):
+                                st.error(f"❌ Nedostatečné zadání nebo chybí rozměr (výška/hloubka) pro produkt {produkt}")
+                                continue
 
-                    debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
+                        debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    # Načti příslušnou záložku
-                    df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
+                        # Načti příslušnou záložku
+                        df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
 
-                    # Vyčistíme sloupce (šířky)
-                    sloupce_ciste = []
-                    for col in df.columns:
-                        try:
-                            sloupce_ciste.append(int(float(col)))
-                        except (ValueError, TypeError):
-                            continue
-                    sloupce = np.array(sloupce_ciste)
+                        # Vyčistíme sloupce (šířky)
+                        sloupce_ciste = []
+                        for col in df.columns:
+                            try:
+                                sloupce_ciste.append(int(float(col)))
+                            except (ValueError, TypeError):
+                                continue
+                        sloupce = np.array(sloupce_ciste)
 
-                    # Vyčistíme indexy (výšky/hloubky)
-                    radky_ciste = []
-                    for idx in df.index:
-                        try:
-                            radky_ciste.append(int(float(idx)))
-                        except (ValueError, TypeError):
-                            continue
-                    radky = np.array(radky_ciste)
+                        # Vyčistíme indexy (výšky/hloubky)
+                        radky_ciste = []
+                        for idx in df.index:
+                            try:
+                                radky_ciste.append(int(float(idx)))
+                            except (ValueError, TypeError):
+                                continue
+                        radky = np.array(radky_ciste)
 
-                    debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
+                        debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
 
-                    if "ZIP" in produkt or "Screen" in produkt:
-                        # Screeny – nejbližší vyšší hodnoty
-                        sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
-                        vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
-                        cena = df.loc[str(vyska_real), str(sirka_real)]
-                        debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
-                    else:
-                        # Pergoly – lineární interpolace
-                        df_num = df.apply(pd.to_numeric, errors='coerce')
-                        df_num.index = pd.to_numeric(df_num.index, errors='coerce')
-                        nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
-                        vyska_row = df_num.loc[nejblizsi_vyska]
-                        cena = np.interp(sirka, sloupce, vyska_row)
-                        debug_text += f"Interpolovaná cena: {cena}\n"
+                        if "ZIP" in produkt or "Screen" in produkt:
+                            # Screeny – nejbližší vyšší hodnoty
+                            sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
+                            vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
+                            cena = df.loc[str(vyska_real), str(sirka_real)]
+                            debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
+                        else:
+                            # Pergoly – lineární interpolace
+                            df_num = df.apply(pd.to_numeric, errors='coerce')
+                            df_num.index = pd.to_numeric(df_num.index, errors='coerce')
+                            nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
+                            vyska_row = df_num.loc[nejblizsi_vyska]
+                            cena = np.interp(sirka, sloupce, vyska_row)
+                            debug_text += f"Interpolovaná cena: {cena}\n"
 
-                    all_rows.append({
-                        "POLOŽKA": produkt,
-                        "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
-                        "CENA bez DPH": round(cena)
-                    })
+                        all_rows.append({
+                            "POLOŽKA": produkt,
+                            "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
+                            "CENA bez DPH": round(cena)
+                        })
 
-                    # Montáže (jen pro pergoly)
-                    if "ZIP" not in produkt and "Screen" not in produkt:
-                        montaze = {
-                            "Montáž 12%": round(cena * 0.12),
-                            "Montáž 13%": round(cena * 0.13),
-                            "Montáž 14%": round(cena * 0.14),
-                            "Montáž 15%": round(cena * 0.15)
-                        }
-                        for montaz_label, montaz_cena in montaze.items():
-                            all_rows.append({
-                                "POLOŽKA": montaz_label,
-                                "ROZMĚR": "",
-                                "CENA bez DPH": montaz_cena
-                            })
+                        # Montáže (jen pro pergoly)
+                        if "ZIP" not in produkt and "Screen" not in produkt:
+                            montaze = {
+                                "Montáž 12%": round(cena * 0.12),
+                                "Montáž 13%": round(cena * 0.13),
+                                "Montáž 14%": round(cena * 0.14),
+                                "Montáž 15%": round(cena * 0.15)
+                            }
+                            for montaz_label, montaz_cena in montaze.items():
+                                all_rows.append({
+                                    "POLOŽKA": montaz_label,
+                                    "ROZMĚR": "",
+                                    "CENA bez DPH": montaz_cena
+                                })
 
-                # Připravíme výsledek jako text do debug panelu
-                result_text = "\n".join([f"{row['POLOŽKA']}: {row['ROZMĚR']} → {row['CENA bez DPH']} Kč"
-                                         for row in all_rows])
-                debug_text += f"\n📤 **Výsledek aplikace:**\n{result_text}\n---\n"
+                    # Připravíme výsledek jako text do debug panelu
+                    result_text = "\n".join([f"{row['POLOŽKA']}: {row['ROZMĚR']} → {row['CENA bez DPH']} Kč"
+                                             for row in all_rows])
+                    debug_text += f"\n📤 **Výsledek aplikace:**\n{result_text}\n---\n"
 
-                # Uložíme výsledek nahoru do historie
-                st.session_state.vysledky.insert(0, all_rows)
-                st.session_state.debug_history += debug_text
+                    # Uložíme výsledek nahoru do historie
+                    st.session_state.vysledky.insert(0, all_rows)
+                    st.session_state.debug_history += debug_text
 
             except json.JSONDecodeError as e:
                 st.error(f"❌ Chyba při zpracování JSON: {e}")
