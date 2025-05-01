@@ -25,11 +25,10 @@ def get_product_data(user_input, sheet_names, api_key):
         model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": (
-                f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou/výškou (v mm) a místem dodání. "
-                f"Název produktu vybírej co nejpřesněji z tohoto seznamu: {', '.join(sheet_names)}. "
-                f"Pokud zadá uživatel 'screen', 'screenová roleta' apod., přiřaď to k 'screen'. "
-                f"Pokud zadá vzorec (např. 3590-240), vypočítej výsledek a použij. "
-                f"Pokud nic nenajdeš, vrať položku 'nenalezeno': true a zprávu pro uživatele."
+                f"Tvůj úkol: z následujícího textu vytáhni produkty s názvem, šířkou, výškou/hloubkou a místem dodání. "
+                f"Vyber z: {', '.join(sheet_names)}. Pokud je 'screen', přiřaď k produktu 'screen'. "
+                f"Pokud je rozměr ve formátu vzorce (např. 3590-240), spočítej výsledek. "
+                f"Pokud nic nenajdeš, vrať {{'nenalezeno': true, 'zprava': 'produkt nenalezen'}}."
             )},
             {"role": "user", "content": user_input}
         ],
@@ -50,15 +49,14 @@ def calculate_prices(cenik_path, sheet_names, products, google_api_key):
     }
 
     for params in products:
-        produkt = params['produkt'].strip().lower()
-        produkt_lookup = produkt_map.get(produkt, produkt)
+        produkt = produkt_map.get(params['produkt'].strip().lower(), params['produkt'].strip().lower())
         misto = params['misto']
         sirka = int(float(params['šířka']))
-        vyska_hloubka = int(float(params['hloubka_výška'])) if params['hloubka_výška'] else (2500 if 'screen' in produkt_lookup else None)
+        vyska_hloubka = int(float(params['hloubka_výška'])) if params['hloubka_výška'] else (2500 if 'screen' in produkt else None)
 
-        sheet_match = next((s for s in sheet_names if s.lower() == produkt_lookup), None)
+        sheet_match = next((s for s in sheet_names if s.lower() == produkt), None)
         if not sheet_match:
-            sheet_match = next((s for s in sheet_names if produkt_lookup in s.lower()), None)
+            sheet_match = next((s for s in sheet_names if produkt in s.lower()), None)
         if not sheet_match:
             continue
 
@@ -70,12 +68,12 @@ def calculate_prices(cenik_path, sheet_names, products, google_api_key):
         cena = df.loc[vyska_real, sirka_real]
 
         all_rows.append({
-            "POLOŽKA": produkt_lookup,
+            "POLOŽKA": produkt,
             "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
             "CENA bez DPH": round(cena)
         })
 
-        if "screen" not in produkt_lookup:
+        if "screen" not in produkt:
             for perc in [12, 13, 14, 15]:
                 all_rows.append({
                     "POLOŽKA": f"Montáž {perc}%",
