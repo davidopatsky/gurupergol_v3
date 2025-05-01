@@ -7,11 +7,11 @@ import numpy as np
 # Nastavení OpenAI klienta
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Layout: levý sloupec (40 %) pro debug, pravý sloupec (60 %) pro hlavní část
-col_debug, col_main = st.columns([0.4, 0.6])
+# Layout: debug vlevo (10 %), hlavní část vpravo (90 %)
+col_debug, col_main = st.columns([0.1, 0.9])
 
 with col_debug:
-    st.markdown("### 🐞 DEBUG výpis (malý text)")
+    st.markdown("### 🐞 DEBUG")
     debug_text = ""
 
 with col_main:
@@ -28,7 +28,7 @@ with col_main:
         st.error(f"❌ Nepodařilo se načíst seznam produktů ze souboru: {e}")
         st.stop()
 
-    user_input = st.text_area("Zadejte popis produktu, rozměry a místo dodání:")
+    user_input = st.text_area("Zadejte popis produktů, rozměry a místo dodání:")
 
     if st.button("Spočítat cenu"):
         if not user_input.strip():
@@ -41,112 +41,98 @@ with col_main:
                         model="gpt-4-turbo",
                         messages=[
                             {"role": "system", "content": (
-                                f"Tvůj úkol: extrahuj z textu přesný název produktu, šířku (v mm), hloubku nebo výšku (v mm) "
-                                f"a místo dodání. Název produktu vybírej tak, aby co nejvíce odpovídal jednomu z následujících produktů: "
-                                f"{seznam_zalozek}. Vrať výsledek POUZE jako platný JSON. Nepřidávej žádný úvod, žádné vysvětlení, "
-                                f"žádný text okolo. Používej dvojité uvozovky kolem klíčů i hodnot. "
-                                f"Formát: {{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}."
+                                f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, "
+                                f"šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. Název produktu vybírej "
+                                f"tak, aby co nejvíce odpovídal jednomu z následujících produktů: {seznam_zalozek}. "
+                                f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani "
+                                f"vysvětlení. Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}, ...]."
                             )},
                             {"role": "user", "content": user_input}
                         ],
-                        max_tokens=500
+                        max_tokens=1000
                     )
 
                     gpt_output_raw = response.choices[0].message.content.strip()
                     debug_text += f"GPT RAW odpověď:\n{gpt_output_raw}\n"
 
-                    # Ořízneme čistý JSON blok, pokud by GPT přidalo něco navíc
-                    start_idx = gpt_output_raw.find('{')
-                    end_idx = gpt_output_raw.rfind('}') + 1
+                    # Ořízneme JSON blok
+                    start_idx = gpt_output_raw.find('[')
+                    end_idx = gpt_output_raw.rfind(']') + 1
                     gpt_output_clean = gpt_output_raw[start_idx:end_idx]
                     debug_text += f"GPT čistý JSON blok:\n{gpt_output_clean}\n"
 
-                    params = json.loads(gpt_output_clean)
-                    st.write("✅ Výstup z GPT:")
-                    st.code(params)
+                    products = json.loads(gpt_output_clean)
+                    all_rows = []
 
-                    produkt = params['produkt']
-                    sirka = int(float(params['šířka']))
-                    vyska_hloubka = int(float(params['hloubka_výška']))
-                    misto = params['misto']
+                    for params in products:
+                        produkt = params['produkt']
+                        sirka = int(float(params['šířka']))
+                        vyska_hloubka = int(float(params['hloubka_výška']))
+                        misto = params['misto']
 
-                    debug_text += f"Rozpoznaný produkt: {produkt}\n"
-                    debug_text += f"Šířka: {sirka}, Hloubka/Výška: {vyska_hloubka}, Místo: {misto}\n"
+                        debug_text += f"\nZpracovávám produkt: {produkt}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    # Načtení příslušné záložky
-                    df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
+                        # Načti příslušnou záložku
+                        df = pd.read_excel(cenik_path, sheet_name=produkt, index_col=0)
 
-                    # Vyčistíme sloupce (šířky)
-                    sloupce_ciste = []
-                    for col in df.columns:
-                        try:
-                            sloupce_ciste.append(int(float(col)))
-                        except (ValueError, TypeError):
-                            continue
-                    sloupce = np.array(sloupce_ciste)
+                        # Vyčistíme sloupce (šířky)
+                        sloupce_ciste = []
+                        for col in df.columns:
+                            try:
+                                sloupce_ciste.append(int(float(col)))
+                            except (ValueError, TypeError):
+                                continue
+                        sloupce = np.array(sloupce_ciste)
 
-                    # Vyčistíme indexy (výšky/hloubky)
-                    radky_ciste = []
-                    for idx in df.index:
-                        try:
-                            radky_ciste.append(int(float(idx)))
-                        except (ValueError, TypeError):
-                            continue
-                    radky = np.array(radky_ciste)
+                        # Vyčistíme indexy (výšky/hloubky)
+                        radky_ciste = []
+                        for idx in df.index:
+                            try:
+                                radky_ciste.append(int(float(idx)))
+                            except (ValueError, TypeError):
+                                continue
+                        radky = np.array(radky_ciste)
 
-                    debug_text += f"Čisté šířky (sloupce): {sloupce}\n"
-                    debug_text += f"Čisté výšky/hloubky (indexy): {radky}\n"
+                        debug_text += f"Čisté šířky: {sloupce}\nČisté výšky/hloubky: {radky}\n"
 
-                    if "ZIP" in produkt or "Screen" in produkt:
-                        # Screeny – nejbližší vyšší hodnoty
-                        sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
-                        vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
-                        cena = df.loc[str(vyska_real), str(sirka_real)]
-                        debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
-                    else:
-                        # Pergoly – lineární interpolace
-                        df_num = df.apply(pd.to_numeric, errors='coerce')
-                        # Převést index na int (pokud není)
-                        df_num.index = pd.to_numeric(df_num.index, errors='coerce')
+                        if "ZIP" in produkt or "Screen" in produkt:
+                            # Screeny – nejbližší vyšší hodnoty
+                            sirka_real = min([s for s in sloupce if s >= sirka], default=max(sloupce))
+                            vyska_real = min([v for v in radky if v >= vyska_hloubka], default=max(radky))
+                            cena = df.loc[str(vyska_real), str(sirka_real)]
+                            debug_text += f"Vybraná šířka: {sirka_real}, výška: {vyska_real}, cena: {cena}\n"
+                        else:
+                            # Pergoly – lineární interpolace
+                            df_num = df.apply(pd.to_numeric, errors='coerce')
+                            df_num.index = pd.to_numeric(df_num.index, errors='coerce')
+                            nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
+                            vyska_row = df_num.loc[nejblizsi_vyska]
+                            cena = np.interp(sirka, sloupce, vyska_row)
+                            debug_text += f"Interpolovaná cena: {cena}\n"
 
-                        # Najít nejbližší výšku
-                        nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
+                        all_rows.append({
+                            "POLOŽKA": produkt,
+                            "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
+                            "CENA bez DPH": round(cena)
+                        })
 
-                        # Vybrat řádek přímo přes číselný index
-                        vyska_row = df_num.loc[nejblizsi_vyska]
-
-                        cena = np.interp(sirka, sloupce, vyska_row)
-                        debug_text += f"Interpolovaná cena: {cena}\n"
-
-                    st.success(f"Cena produktu: {round(cena)} Kč bez DPH")
-
-                    # Doprava (pevná vzdálenost 100 km)
-                    vzdalenost_km = 100
-                    doprava = vzdalenost_km * 2 * 15
-                    debug_text += f"Výpočet dopravy: {doprava} Kč\n"
-
-                    # Montáže (jen pro pergoly)
-                    montaze = {}
-                    if "ZIP" not in produkt and "Screen" not in produkt:
-                        montaze = {
-                            "Montáž 12%": round(cena * 0.12),
-                            "Montáž 13%": round(cena * 0.13),
-                            "Montáž 14%": round(cena * 0.14),
-                            "Montáž 15%": round(cena * 0.15)
-                        }
-                        debug_text += f"Výpočty montáží: {montaze}\n"
-
-                    # Tabulka výsledků
-                    tabulka = [
-                        {"POLOŽKA": produkt, "ROZMĚR": f"{sirka} × {vyska_hloubka} mm", "CENA bez DPH": round(cena)},
-                        {"POLOŽKA": "Doprava", "ROZMĚR": f"{vzdalenost_km} km", "CENA bez DPH": round(doprava)}
-                    ]
-
-                    for montaz_label, montaz_cena in montaze.items():
-                        tabulka.append({"POLOŽKA": montaz_label, "ROZMĚR": "", "CENA bez DPH": montaz_cena})
+                        # Montáže (jen pro pergoly)
+                        if "ZIP" not in produkt and "Screen" not in produkt:
+                            montaze = {
+                                "Montáž 12%": round(cena * 0.12),
+                                "Montáž 13%": round(cena * 0.13),
+                                "Montáž 14%": round(cena * 0.14),
+                                "Montáž 15%": round(cena * 0.15)
+                            }
+                            for montaz_label, montaz_cena in montaze.items():
+                                all_rows.append({
+                                    "POLOŽKA": montaz_label,
+                                    "ROZMĚR": "",
+                                    "CENA bez DPH": montaz_cena
+                                })
 
                     st.write("✅ **Výsledná tabulka**")
-                    st.table(tabulka)
+                    st.table(all_rows)
 
                 except json.JSONDecodeError as e:
                     st.error(f"❌ Chyba při zpracování JSON: {e}")
@@ -165,6 +151,6 @@ with col_main:
         unsafe_allow_html=True
     )
 
-# Výpis debug textu (malým písmem)
+# Debug výpis vlevo (10 % šířky)
 with col_debug:
-    st.markdown(f"<pre style='font-size: 10px'>{debug_text}</pre>", unsafe_allow_html=True)
+    st.markdown(f"<pre style='font-size: 10px; white-space: pre-wrap;'>{debug_text}</pre>", unsafe_allow_html=True)
