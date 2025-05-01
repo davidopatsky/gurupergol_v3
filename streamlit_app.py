@@ -13,15 +13,15 @@ st.markdown(
     """
     <style>
     .main { max-width: 80%; margin: auto; }
-    h1 { font-size: 1.1em; display: inline; vertical-align: middle; }  /* menší nadpis */
+    h1 { font-size: 1.1em; display: inline; vertical-align: middle; }
     .small-header {
-        font-size: 8px;  /* zmenšeno na 50% */
+        font-size: 8px;
         color: #555;
         text-align: center;
         margin: 10px 0;
         word-wrap: break-word;
         white-space: normal;
-        line-height: 1.1;  /* menší řádkování */
+        line-height: 1.1;
     }
     .debug-panel {
         position: fixed; bottom: 0; left: 0; right: 0; height: 20%;
@@ -38,7 +38,7 @@ col1, col2 = st.columns([1, 8])
 with col1:
     try:
         image = Image.open("data/alux logo samotne.png")
-        st.image(image, width=150)  # zvětšeno logo
+        st.image(image, width=150)
     except:
         st.markdown(
             "<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='150'>",
@@ -96,9 +96,7 @@ def get_distance_km(origin, destination, api_key):
         return None
 
 # === Funkce zpracování vstupu ===
-def process_input():
-    user_input = st.session_state.user_input
-    st.session_state.processing = True
+def process_input(user_input):
     debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
     try:
         cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
@@ -121,13 +119,16 @@ def process_input():
         )
         content = response.choices[0].message.content.strip()
 
-        start_idx = content.find('[')
-        end_idx = content.rfind(']') + 1
-        if start_idx == -1 or end_idx == 0:
+        start_idx = min(content.find('['), content.find('{'))
+        if start_idx == -1:
             raise ValueError(f"❌ GPT nevrátil platný JSON blok. Obsah:\n{content}")
 
-        json_block = content[start_idx:end_idx]
-        products = json.loads(json_block)
+        json_block = content[start_idx:]
+        parsed = json.loads(json_block)
+        if isinstance(parsed, dict):
+            parsed = [{"produkt": k, **v} for k, v in parsed.items()]
+        products = parsed
+
         all_rows = []
         produkt_map = {
             "alux screen": "screen", "alux screen 1": "screen", "screen": "screen",
@@ -194,17 +195,14 @@ def process_input():
     st.session_state.debug_history += debug_text
     st.session_state.processing = False
 
-# === Vstupní pole s Enter ===
-st.text_area(
-    "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
-    key="user_input",
-    height=75,
-    on_change=process_input
-)
+# === Vstupní pole ===
+if st.text_area("Zadej vstup zde (potvrď Enter nebo tlačítkem):", key="user_input", height=75):
+    st.session_state.processing = True
 
-# === Indikátor zpracování ===
+# === Indikátor zpracování a spouštění ===
 if st.session_state.processing:
     st.info("⏳ Zpracovávám vstup…")
+    process_input(st.session_state.user_input)
 
 # === Výsledky ===
 for idx, vysledek in enumerate(st.session_state.vysledky):
