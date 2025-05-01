@@ -5,12 +5,10 @@ import json
 import numpy as np
 import requests
 
+# MUSÍ být první Streamlit příkaz:
 st.set_page_config(layout="wide")
 
-# Nastavení OpenAI klienta
-client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# CSS pro zúžení aplikace na 80 % a debug panel
+# CSS pro zúžení aplikace na 80 %
 st.markdown(
     """
     <style>
@@ -22,6 +20,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 # Inicializace historie v session
 if 'vysledky' not in st.session_state:
