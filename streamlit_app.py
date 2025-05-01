@@ -5,6 +5,8 @@ import json
 import numpy as np
 import requests
 
+st.set_page_config(layout="wide")
+
 # Nastavení OpenAI klienta
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
