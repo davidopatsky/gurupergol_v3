@@ -6,10 +6,10 @@ import numpy as np
 import requests
 from PIL import Image
 
-# Nastavení stránky
+# === Nastavení stránky ===
 st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 
-# Stylování
+# === Stylování ===
 st.markdown(
     """
     <style>
@@ -44,7 +44,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Horní řádek: logo + nadpis
+# === Horní řádek: logo + nadpis ===
 col1, col2 = st.columns([1, 8])
 with col1:
     try:
@@ -59,7 +59,7 @@ with col1:
 with col2:
     st.title("Asistent cenových nabídek od Davida")
 
-# Malý úvodní text
+# === Úvodní text ===
 st.markdown(
     """
     <div class="small-header">
@@ -77,7 +77,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Popis nad vstupem
+# === Popis zadávání ===
 st.markdown(
     """
     <b>Jak zadávat:</b><br>
@@ -88,21 +88,21 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Inicializace session stavů
+# === Inicializace session stavů ===
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
     st.session_state.debug_history = ""
 
-# Vstupní okno
+# === Vstupní pole ===
 user_input = st.text_area(
     "Zadej vstup zde (potvrď Enter nebo tlačítkem):",
     height=75
 )
 
-# Funkce na načtení vzdálenosti
+# === Funkce na výpočet vzdálenosti ===
 def get_distance_km(origin, destination, api_key):
-    url = f"https://maps.googleapis.com/maps/api/distancematrix/json"
+    url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
         'origins': origin,
         'destinations': destination,
@@ -113,12 +113,12 @@ def get_distance_km(origin, destination, api_key):
     data = response.json()
     try:
         distance_meters = data['rows'][0]['elements'][0]['distance']['value']
-        return distance_meters / 1000  # km
+        return distance_meters / 1000
     except Exception as e:
         st.error(f"❌ Chyba při načítání vzdálenosti: {e}")
         return None
 
-# Backend část
+# === Backend logika ===
 if user_input:
     debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
     try:
@@ -137,8 +137,7 @@ if user_input:
                     f"Pokud uživatel zadá rozměry ve formátu vzorce, například '3590-240', SPOČÍTEJ výsledek a použij tento výsledek jako finální hodnotu rozměru. "
                     f"Nikdy nevrať 'nenalezeno' kvůli těmto výrazům, i když nejsou přesnou shodou. "
                     f"Pokud žádný jiný produkt neodpovídá, vrať položku s klíčem 'nenalezeno': true a zprávou pro uživatele, že produkt nebyl nalezen a je třeba upřesnit název. "
-                    f"Vrať výsledek POUZE jako platný JSON seznam položek. Nepřidávej žádný úvod ani vysvětlení. "
-                    f"Formát: [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"produkt nenalezen, prosím o upřesnění názvu produktu\"}}]."
+                    f"Vrať výsledek POUZE jako platný JSON seznam položek."
                 )},
                 {"role": "user", "content": user_input}
             ],
@@ -237,4 +236,28 @@ if user_input:
                     api_key = st.secrets["GOOGLE_API_KEY"]
                     distance_km = get_distance_km("Blučina, Czechia", misto, api_key)
                     if distance_km:
-                        dopr
+                        doprava_cena = distance_km * 2 * 15
+                        all_rows.append({
+                            "POLOŽKA": "Doprava",
+                            "ROZMĚR": f"{distance_km:.1f} km",
+                            "CENA bez DPH": round(doprava_cena)
+                        })
+
+            st.session_state.vysledky.insert(0, all_rows)
+
+    except Exception as e:
+        st.error(f"❌ Došlo k chybě: {e}")
+        debug_text += f"Exception: {e}\n"
+
+    st.session_state.debug_history += debug_text
+
+# === Výsledky ===
+for idx, vysledek in enumerate(st.session_state.vysledky):
+    st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
+    st.table(vysledek)
+
+# === Debug panel ===
+st.markdown(
+    f"<div class='debug-panel'><pre>{st.session_state.debug_history}</pre></div>",
+    unsafe_allow_html=True
+)
