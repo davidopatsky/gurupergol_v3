@@ -5,8 +5,20 @@ import backend
 
 st.set_page_config(page_title="Asistent cenových nabídek", layout="wide")
 
-st.markdown("""<style> .main { max-width: 80%; margin: auto; } h1 { font-size: 1.5em; display: inline; } .small-header { font-size: 11px; color: #555; text-align: center; margin-bottom: 20px; } .debug-panel { position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; background-color: #f0f0f0; font-size: 8px; padding: 5px; } </style>""", unsafe_allow_html=True)
+# Stylování
+st.markdown(
+    """
+    <style>
+    .main { max-width: 80%; margin: auto; }
+    h1 { font-size: 1.5em; display: inline; }
+    .small-header { font-size: 11px; color: #555; text-align: center; margin: 20px 0; word-wrap: break-word; white-space: normal; }
+    .debug-panel { position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; background-color: #f0f0f0; font-size: 8px; padding: 5px; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
+# Horní řádek: logo + nadpis
 col1, col2 = st.columns([1, 8])
 with col1:
     try:
@@ -15,10 +27,27 @@ with col1:
     except:
         st.markdown("<img src='https://raw.githubusercontent.com/TVUJ_UZIVATEL/TVUJ_REPO/main/data/alux%20logo%20samotne.png' width='100'>", unsafe_allow_html=True)
 with col2:
-    st.title("Asistent cenových nabídek od Davida")
+    st.markdown("<h1>Asistent cenových nabídek od Davida</h1>", unsafe_allow_html=True)
 
-st.markdown("""<div class="small-header"> Ahoj, já jsem asistent GPT, kterého stvořil David… ❤️ </div>""", unsafe_allow_html=True)
-st.markdown("""<b>Jak zadávat:</b><br> Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm).<br> U screenu můžeš zadat šířku jako např. <i>3590-240</i> kvůli odpočtům sloupků.<br> Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API.""", unsafe_allow_html=True)
+# Úvodní text
+st.markdown(
+    """
+    <div class="small-header">
+    Ahoj, já jsem asistent GPT, kterého stvořil David… ❤️
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <b>Jak zadávat:</b><br>
+    Zadej produkt a rozměry, u screenu stačí zadat šířku (výchozí výška je 2500 mm).<br>
+    U screenu můžeš zadat šířku jako např. <i>3590-240</i> kvůli odpočtům sloupků.<br>
+    Po zadání názvu místa dodání se vypočítá doprava přes Google Maps API.
+    """,
+    unsafe_allow_html=True
+)
 
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
