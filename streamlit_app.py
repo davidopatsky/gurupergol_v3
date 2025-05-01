@@ -109,11 +109,11 @@ with col_main:
                         # Převést index na int (pokud není)
                         df_num.index = pd.to_numeric(df_num.index, errors='coerce')
 
-            # Najít nejbližší výšku
-    nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
+                        # Najít nejbližší výšku
+                        nejblizsi_vyska = min(radky, key=lambda x: abs(x - vyska_hloubka))
 
-# Vybrat řádek přímo přes číselný index
-            vyska_row = df_num.loc[nejblizsi_vyska]
+                        # Vybrat řádek přímo přes číselný index
+                        vyska_row = df_num.loc[nejblizsi_vyska]
 
                         cena = np.interp(sirka, sloupce, vyska_row)
                         debug_text += f"Interpolovaná cena: {cena}\n"
