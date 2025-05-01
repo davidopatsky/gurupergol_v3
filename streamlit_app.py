@@ -5,10 +5,10 @@ import json
 import numpy as np
 import requests
 
-# MUSÍ být první Streamlit příkaz:
+# Nastavení stránky – MUSÍ být první Streamlit příkaz
 st.set_page_config(layout="wide")
 
-# CSS pro zúžení aplikace na 80 %
+# CSS pro zúžení aplikace na 80 % a menší debug panel
 st.markdown(
     """
     <style>
@@ -21,14 +21,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 # Inicializace historie v session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
     st.session_state.debug_history = ""
 
-st.set_page_config(layout="wide")
 st.title("Asistent cenových nabídek od Davida")
 
 # Funkce na načtení vzdálenosti přes Google API
@@ -68,6 +66,7 @@ if user_input:
     debug_text = f"\n---\n📥 **Vstup uživatele:** {user_input}\n"
     with st.spinner("Analyzuji vstup přes ChatGPT..."):
         try:
+            client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
             response = client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=[
@@ -118,14 +117,12 @@ if user_input:
                     produkt_lookup = produkt_map.get(produkt, produkt)
                     misto = params['misto']
 
-                    # Ověření a převod šířky
                     try:
                         sirka = int(float(params['šířka']))
                     except (ValueError, TypeError):
                         st.error(f"❌ Chybí rozměr (šířka) pro produkt {produkt}")
                         continue
 
-                    # Ověření a převod výšky/hloubky
                     if params['hloubka_výška'] is None:
                         vyska_hloubka = 2500 if "screen" in produkt_lookup else None
                         if vyska_hloubka is None:
@@ -140,7 +137,6 @@ if user_input:
 
                     debug_text += f"\nZpracovávám produkt: {produkt_lookup}, {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    # Najdeme záložku
                     sheet_match = next((s for s in st.session_state.sheet_names if s.lower() == produkt_lookup), None)
                     if sheet_match is None:
                         sheet_match = next((s for s in st.session_state.sheet_names if produkt_lookup in s.lower()), None)
@@ -151,8 +147,6 @@ if user_input:
                         continue
 
                     df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
-
-                    # Čisté hodnoty
                     sloupce = sorted([int(float(c)) for c in df.columns if str(c).isdigit()])
                     radky = sorted([int(float(r)) for r in df.index if str(r).isdigit()])
 
@@ -183,7 +177,6 @@ if user_input:
                         "CENA bez DPH": round(cena)
                     })
 
-                    # Montáže
                     if "screen" not in produkt_lookup:
                         for perc in [12, 13, 14, 15]:
                             all_rows.append({
@@ -192,7 +185,6 @@ if user_input:
                                 "CENA bez DPH": round(cena * perc / 100)
                             })
 
-                    # Doprava (Google API)
                     if misto:
                         api_key = st.secrets["GOOGLE_API_KEY"]
                         distance_km = get_distance_km("Blučina, Czechia", misto, api_key)
