@@ -8,13 +8,17 @@ import requests
 # Nastavení stránky
 st.set_page_config(layout="wide")
 
-# CSS úprava: zúžení + vyšší debug panel
+# CSS úprava: zúžení, velký nadpis a vysoký debug panel
 st.markdown(
     """
     <style>
     .main {
         max-width: 80%;
         margin: auto;
+    }
+    h1 {
+        font-size: 45px !important;
+        margin-top: 0 !important;
     }
     </style>
     """,
@@ -39,7 +43,7 @@ def get_distance_km(origin, destination, api_key):
         'units': 'metric'
     }
     response = requests.get(url, params=params)
-    st.session_state.debug_history += f"📡 Google API Request: {response.url}\n"
+    st.session_state.debug_history += f"\n📡 Google API Request: {response.url}\n"
     data = response.json()
     st.session_state.debug_history += f"📬 Google API Response: {json.dumps(data, indent=2)}\n"
     try:
@@ -55,7 +59,7 @@ try:
     excel_file = pd.ExcelFile(cenik_path)
     sheet_names = excel_file.sheet_names
     st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"📄 Načtené záložky: {sheet_names}\n"
+    st.session_state.debug_history += f"\n📄 Načtené záložky: {sheet_names}\n"
 except Exception as e:
     st.error(f"❌ Nepodařilo se načíst Excel: {e}")
     st.stop()
@@ -72,7 +76,7 @@ if user_input:
                 f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty..."
                 f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(sheet_names)}. ..."
             )
-            debug_text += f"📨 GPT prompt:\n{gpt_prompt}\n"
+            debug_text += f"\n📨 GPT prompt:\n{gpt_prompt}\n"
 
             response = client.chat.completions.create(
                 model="gpt-4-turbo",
@@ -83,12 +87,12 @@ if user_input:
                 max_tokens=1000
             )
             gpt_output_raw = response.choices[0].message.content.strip()
-            debug_text += f"📬 GPT odpověď RAW:\n{gpt_output_raw}\n"
+            debug_text += f"\n📬 GPT odpověď RAW:\n{gpt_output_raw}\n"
 
             start_idx = gpt_output_raw.find('[')
             end_idx = gpt_output_raw.rfind(']') + 1
             gpt_output_clean = gpt_output_raw[start_idx:end_idx]
-            debug_text += f"📦 GPT čistý JSON:\n{gpt_output_clean}\n"
+            debug_text += f"\n📦 GPT čistý JSON:\n{gpt_output_clean}\n"
 
             products = json.loads(gpt_output_clean)
             all_rows = []
@@ -96,7 +100,7 @@ if user_input:
             if products and 'nenalezeno' in products[0]:
                 zprava = products[0].get('zprava', 'Produkt nenalezen.')
                 st.warning(f"❗ {zprava}")
-                debug_text += f"⚠ {zprava}\n"
+                debug_text += f"\n⚠ {zprava}\n"
             else:
                 produkt_map = {
                     "screen": "screen", "alux screen": "screen",
@@ -127,24 +131,24 @@ if user_input:
 
                     if not sheet_match:
                         st.error(f"❌ Nenalezena záložka: {produkt_lookup}")
-                        debug_text += f"❌ Nenalezena záložka '{produkt_lookup}'\n"
+                        debug_text += f"\n❌ Nenalezena záložka '{produkt_lookup}'\n"
                         continue
 
                     df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
                     sloupce = sorted([int(float(c)) for c in df.columns if str(c).isdigit()])
                     radky = sorted([int(float(r)) for r in df.index if str(r).isdigit()])
-                    debug_text += f"📊 Ceník {sheet_match} – šířky: {sloupce}, výšky: {radky}\n"
+                    debug_text += f"\n📊 Ceník {sheet_match} – šířky: {sloupce}, výšky: {radky}\n"
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                     vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-                    debug_text += f"📐 Použitá rozměrová matice: {sirka_real}×{vyska_real}\n"
+                    debug_text += f"\n📐 Použitá rozměrová matice: {sirka_real}×{vyska_real}\n"
 
                     try:
                         cena = df.loc[vyska_real, sirka_real]
-                        debug_text += f"💰 Nalezená cena: {cena}\n"
+                        debug_text += f"\n💰 Nalezená cena: {cena}\n"
                     except KeyError:
                         st.error(f"❌ Nenalezena cena pro {sirka_real} × {vyska_real}")
-                        debug_text += f"❌ Cenová hodnota nenalezena\n"
+                        debug_text += f"\n❌ Cenová hodnota nenalezena\n"
                         continue
 
                     all_rows.append({
@@ -161,7 +165,7 @@ if user_input:
                                 "ROZMĚR": "",
                                 "CENA bez DPH": montaz_cena
                             })
-                            debug_text += f"🧮 Montáž {perc}% = {montaz_cena}\n"
+                            debug_text += f"\n🧮 Montáž {perc}% = {montaz_cena}\n"
 
                     if misto:
                         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -173,21 +177,21 @@ if user_input:
                                 "ROZMĚR": f"{distance_km:.1f} km",
                                 "CENA bez DPH": round(doprava_cena)
                             })
-                            debug_text += f"🚚 Doprava ({distance_km:.1f} km) = {round(doprava_cena)} Kč\n"
+                            debug_text += f"\n🚚 Doprava ({distance_km:.1f} km) = {round(doprava_cena)} Kč\n"
 
             st.session_state.vysledky.insert(0, all_rows)
             st.session_state.debug_history += debug_text
 
         except Exception as e:
             st.error(f"❌ Výjimka: {e}")
-            st.session_state.debug_history += f"⛔ Výjimka: {e}\n"
+            st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
 
 # Výstup výsledků
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (dvojnásobná výška)
+# Debug panel (větší)
 st.markdown(
     f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 40%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
