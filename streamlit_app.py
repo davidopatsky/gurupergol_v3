@@ -68,7 +68,7 @@ if user_input:
     with st.spinner("Analyzuji vstup přes ChatGPT..."):
         try:
             client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-            debug_text += "📡 Odesílám požadavek na GPT...
+            debug_text += "📡 Odesílám požadavek na GPT..."
 "
             response = client.chat.completions.create(
                 model="gpt-4-turbo",
