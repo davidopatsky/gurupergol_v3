@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 import openai
 import json
-import numpy as np
 import requests
 
 # Nastavení stránky
 st.set_page_config(layout="wide")
 
-# CSS: zúžení layoutu + větší nadpis
+# CSS úprava: větší nadpis a šířka aplikace
 st.markdown(
     """
     <style>
@@ -25,7 +24,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Inicializace session state
+# Inicializace session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -33,7 +32,7 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# Funkce: výpočet vzdálenosti pomocí Google Maps API
+# Funkce na výpočet vzdálenosti
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -53,7 +52,7 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načtení Excel ceníku
+# Načtení Excelu
 cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
 try:
     excel_file = pd.ExcelFile(cenik_path)
@@ -78,8 +77,7 @@ if user_input:
                 f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(sheet_names)}. "
                 f"POZOR: Pokud uživatel napíše jakoukoli z těchto frází: 'screen', 'screenová roleta', 'boční screen', 'boční screenová roleta' — VŽDY to přiřaď k produktu 'screen'. "
                 f"Rozměry ve vzorcích (např. 3590-240) vždy dopočítej. "
-                f"Vrať POUZE validní JSON seznam položek. Např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}]"
-                f" nebo [{{\"nenalezeno\": true, \"zprava\": \"...\"}}]. Nepiš nic mimo JSON."
+                f"Vrať POUZE validní JSON seznam položek. Např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"...\"}}]. Nepiš nic mimo JSON."
             )
             debug_text += f"\n📨 GPT prompt:\n{gpt_prompt}\n"
 
@@ -148,8 +146,24 @@ if user_input:
                         continue
 
                     df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
-                    sloupce = sorted([int(float(c)) for c in df.columns if str(c).isdigit()])
-                    radky = sorted([int(float(r)) for r in df.index if str(r).isdigit()])
+
+                    # OPRAVA: načti sloupce a řádky bez mezer a s čárkou jako desetinnou tečkou
+                    sloupce = sorted([
+                        int(float(str(c).replace(" ", "").replace(",", ".")))
+                        for c in df.columns
+                        if isinstance(c, str) or isinstance(c, (int, float))
+                    ])
+                    radky = sorted([
+                        int(float(str(r).replace(" ", "").replace(",", ".")))
+                        for r in df.index
+                        if isinstance(r, str) or isinstance(r, (int, float))
+                    ])
+
+                    if not sloupce or not radky:
+                        st.error(f"❌ Záložka '{sheet_match}' neobsahuje platné číselné rozměry.")
+                        debug_text += f"\n❌ Chybí číselné řádky nebo sloupce v záložce '{sheet_match}'\n"
+                        continue
+
                     debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
@@ -157,22 +171,22 @@ if user_input:
                     debug_text += f"\n📐 Použité rozměry v ceníku: {sirka_real}×{vyska_real}\n"
 
                     try:
-                        cena = df.loc[vyska_real, sirka_real]
+                        cena = df.loc[str(vyska_real), str(sirka_real)]
                         debug_text += f"\n💰 Nalezená cena: {cena} Kč\n"
-                    except KeyError:
+                    except Exception as e:
                         st.error(f"❌ Nenalezena cena pro {sirka_real}×{vyska_real}")
-                        debug_text += f"\n❌ Cena nenalezena\n"
+                        debug_text += f"\n❌ Chyba při čtení ceny: {e}\n"
                         continue
 
                     all_rows.append({
                         "POLOŽKA": produkt_lookup,
                         "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
-                        "CENA bez DPH": round(cena)
+                        "CENA bez DPH": round(float(cena))
                     })
 
                     if "screen" not in produkt_lookup:
                         for perc in [12, 13, 14, 15]:
-                            cena_montaz = round(cena * perc / 100)
+                            cena_montaz = round(float(cena) * perc / 100)
                             all_rows.append({
                                 "POLOŽKA": f"Montáž {perc}%",
                                 "ROZMĚR": "",
@@ -180,7 +194,7 @@ if user_input:
                             })
                             debug_text += f"\n🛠️ Montáž {perc}%: {cena_montaz} Kč\n"
 
-                    if misto:
+                    if misto and misto.lower() != "nedodáno":
                         api_key = st.secrets["GOOGLE_API_KEY"]
                         distance_km = get_distance_km("Blučina, Czechia", misto, api_key)
                         if distance_km:
@@ -209,7 +223,7 @@ for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (větší)
+# Debug panel
 st.markdown(
     f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 40%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
