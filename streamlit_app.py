@@ -6,7 +6,6 @@ import requests
 
 st.set_page_config(layout="wide")
 
-# Styl
 st.markdown("""
     <style>
     .main { max-width: 80%; margin: auto; }
@@ -14,7 +13,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicializace session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -22,7 +20,6 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# Funkce: vzdálenost
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -41,7 +38,7 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načtení ceníku
+# Načti Excel
 cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
 try:
     excel_file = pd.ExcelFile(cenik_path)
@@ -52,7 +49,7 @@ except Exception as e:
     st.error(f"❌ Nepodařilo se načíst Excel: {e}")
     st.stop()
 
-# Vstup
+# Uživatelský vstup
 user_input = st.text_input("Zadejte popis produktů, rozměry a místo dodání (potvrďte Enter):")
 
 if user_input:
@@ -91,6 +88,8 @@ if user_input:
             debug_text += f"\n📦 GPT JSON blok:\n{gpt_output_clean}\n"
 
             products = json.loads(gpt_output_clean)
+            debug_text += f"\n📤 GPT parsed výstup:\n{json.dumps(products, indent=2)}\n"
+
             all_rows = []
 
             if products and 'nenalezeno' in products[0]:
@@ -179,6 +178,7 @@ if user_input:
                             debug_text += f"\n🚚 Doprava {distance_km:.1f} km = {cena_doprava} Kč\n"
 
             st.session_state.vysledky.insert(0, all_rows)
+            debug_text += f"\n📦 Výsledná tabulka:\n{pd.DataFrame(all_rows).to_string(index=False)}\n"
             st.session_state.debug_history += debug_text
 
         except json.JSONDecodeError as e:
@@ -193,9 +193,9 @@ for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel
+# Debug panel (výška snížena na 50 %)
 st.markdown(
-    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 40%; overflow-y: scroll; "
+    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 50%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
     f"<pre>{st.session_state.debug_history}</pre></div>",
     unsafe_allow_html=True
