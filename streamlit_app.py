@@ -6,6 +6,7 @@ import requests
 
 st.set_page_config(layout="wide")
 
+# Styl
 st.markdown("""
     <style>
     .main { max-width: 80%; margin: auto; }
@@ -13,6 +14,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Inicializace session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -20,6 +22,7 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
+# Funkce: vzdálenost
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -38,7 +41,7 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načti Excel
+# Načtení Excelu
 cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
 try:
     excel_file = pd.ExcelFile(cenik_path)
@@ -49,10 +52,16 @@ except Exception as e:
     st.error(f"❌ Nepodařilo se načíst Excel: {e}")
     st.stop()
 
-# Uživatelský vstup
-user_input = st.text_input("Zadejte popis produktů, rozměry a místo dodání (potvrďte Enter):")
+# Formulář pro vstup
+with st.form(key="vstupni_formular"):
+    user_input = st.text_area(
+        "Zadejte popis produktů, rozměry a místo dodání:",
+        height=100,
+        placeholder="Např. ALUX Glass 6000x2500 Brno, screen 3500x2500..."
+    )
+    submit_button = st.form_submit_button(label="📤 ODESLAT")
 
-if user_input:
+if submit_button and user_input:
     debug_text = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
 
     with st.spinner("Analyzuji vstup pomocí GPT..."):
@@ -188,14 +197,14 @@ if user_input:
             st.error(f"❌ Výjimka: {e}")
             st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
 
-# Výstupy
+# Výpis výsledků
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (výška snížena na 50 %)
+# Debug panel (20 % výšky)
 st.markdown(
-    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 50%; overflow-y: scroll; "
+    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
     f"<pre>{st.session_state.debug_history}</pre></div>",
     unsafe_allow_html=True
