@@ -1,5 +1,5 @@
 :root {
-    --bg-opacity: 0.99; /* nastav průhlednost zde (0 = průhledné, 1 = plné) */
+    --bg-opacity: 0.5; /* nastav průhlednost zde (0 = průhledné, 1 = plné) */
 }
 
 /* Globální pozadí */
