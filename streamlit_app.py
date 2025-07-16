@@ -6,7 +6,6 @@ import requests
 
 st.set_page_config(layout="wide")
 
-# Styl
 st.markdown("""
     <style>
     .main { max-width: 80%; margin: auto; }
@@ -14,7 +13,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicializace session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -22,7 +20,6 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# Funkce: vzdálenost
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -41,15 +38,21 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načtení Excelu
-cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
+# Načtení seznamu záložek a jednotlivých ceníků z Google Sheet CSV exportu
+base_csv_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTpKsz080LaY0rV5ha1qtZEgUVK496mAMWlcGsu6b0smAnZTQbrvba6YsWe6UZcag/pub?output=csv"
 try:
-    excel_file = pd.ExcelFile(cenik_path)
-    sheet_names = excel_file.sheet_names
+    # Předpoklad: první list je tabulka produktů + jejich odkazů na další CSV
+    df_index = pd.read_csv(base_csv_url)
+    sheet_map = {
+        row['Produkt'].strip().lower(): row['URL'].strip()
+        for _, row in df_index.iterrows()
+    }
+    sheet_names = list(sheet_map.keys())
     st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"\n📄 Načtené záložky: {sheet_names}\n"
+    st.session_state.sheet_map = sheet_map
+    st.session_state.debug_history += f"\n📄 Načtené produkty: {sheet_names}\n"
 except Exception as e:
-    st.error(f"❌ Nepodařilo se načíst Excel: {e}")
+    st.error(f"❌ Nepodařilo se načíst hlavní seznam produktů: {e}")
     st.stop()
 
 # Formulář pro vstup
@@ -129,29 +132,31 @@ if submit_button and user_input:
 
                     debug_text += f"\n🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    sheet_match = next((s for s in sheet_names if s.lower() == produkt_lookup), None)
-                    if not sheet_match:
-                        st.error(f"❌ Nenalezena záložka: {produkt_lookup}")
-                        debug_text += f"\n❌ Nenalezena záložka '{produkt_lookup}'\n"
+                    if produkt_lookup not in sheet_map:
+                        st.error(f"❌ Nenalezen odkaz pro produkt: {produkt_lookup}")
+                        debug_text += f"\n❌ Nenalezen CSV odkaz pro produkt '{produkt_lookup}'\n"
                         continue
 
-                    df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
-
-                    sloupce = sorted([int(c) for c in df.columns if isinstance(c, (int, float))])
-                    radky = sorted([int(r) for r in df.index if isinstance(r, (int, float))])
-
-                    if not sloupce or not radky:
-                        st.error(f"❌ Ceník '{sheet_match}' nemá správnou strukturu.")
-                        debug_text += f"\n❌ Prázdná matice v záložce '{sheet_match}'\n"
+                    try:
+                        df = pd.read_csv(sheet_map[produkt_lookup], index_col=0)
+                        df.columns = [int(float(c)) for c in df.columns]
+                        df.index = [int(float(i)) for i in df.index]
+                    except Exception as e:
+                        st.error(f"❌ Chyba při načítání ceníku: {e}")
+                        debug_text += f"\n❌ Načtení ceníku selhalo: {e}\n"
                         continue
+
+                    sloupce = sorted(df.columns)
+                    radky = sorted(df.index)
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                     vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
+
                     debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
                     debug_text += f"\n📐 Vybraná velikost: {sirka_real}×{vyska_real}\n"
 
                     try:
-                        cena = df.loc[vyska_real, sirka_real]
+                        cena = df.at[vyska_real, sirka_real]
                         debug_text += f"\n💰 Cena nalezena: {cena} Kč\n"
                     except Exception as e:
                         st.error(f"❌ Cena nenalezena: {e}")
@@ -197,12 +202,12 @@ if submit_button and user_input:
             st.error(f"❌ Výjimka: {e}")
             st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
 
-# Výpis výsledků
+# Výstupy
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (20 % výšky)
+# Debug panel – 20 % výšky
 st.markdown(
     f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
