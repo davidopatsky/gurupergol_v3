@@ -2,52 +2,50 @@ import streamlit as st
 import pandas as pd
 import openai
 import json
-import os
 import requests
 import base64
+import os
 
 st.set_page_config(layout="wide")
 
-# 🔳 Styl a pozadí
+# === Funkce pro nastavení pozadí ===
 def set_background(image_path, opacity=0.2):
-    with open(image_path, "rb") as image_file:
-        encoded = base64.b64encode(image_file.read()).decode()
-    st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{encoded}");
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-            position: relative;
-        }}
-        .stApp::before {{
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,{1 - opacity});
-            z-index: -1;
-        }}
-        .main > div > div > div > div {{
-            background-color: rgba(240,240,240,0.9);
-            padding: 10px;
-            border-radius: 10px;
-        }}
-        table {{
-            background-color: #f5f5f5 !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+            st.markdown(f"""
+                <style>
+                    .stApp {{
+                        background: url("data:image/png;base64,{encoded_string}");
+                        background-size: cover;
+                        background-repeat: no-repeat;
+                        background-attachment: fixed;
+                        opacity: 1;
+                    }}
+                    .block-container {{
+                        background-color: rgba(255, 255, 255, {1 - opacity});
+                        padding: 2rem;
+                        border-radius: 1rem;
+                    }}
+                </style>
+            """, unsafe_allow_html=True)
+    else:
+        st.warning(f"Pozadí '{image_path}' nebylo nalezeno.")
 
+# === Styl ===
 set_background("grafika/pozadi_hlavni.PNG", opacity=0.2)
 
-# 🧠 Inicializace session
+st.markdown("""
+    <style>
+    .main { max-width: 80%; margin: auto; }
+    h1 { font-size: 45px !important; margin-top: 0 !important; }
+    .dataframe tbody tr th, .dataframe tbody tr td {
+        background-color: #f0f0f0 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# === Inicializace session ===
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -55,15 +53,10 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# 📍 Google Maps API – výpočet vzdálenosti
+# === Vzdálenost pomocí Google API ===
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {
-        'origins': origin,
-        'destinations': destination,
-        'key': api_key,
-        'units': 'metric'
-    }
+    params = {'origins': origin, 'destinations': destination, 'key': api_key, 'units': 'metric'}
     response = requests.get(url, params=params)
     st.session_state.debug_history += f"\n📡 Google API Request: {response.url}\n"
     data = response.json()
@@ -74,36 +67,36 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# 📂 Načti všechny CSV z adresáře 'ceniky'
-ceniky_dir = "ceniky"
+# === Načti CSV ceníky z adresáře ===
+cenik_dir = "ceniky"
 ceniky = {}
 try:
-    for filename in os.listdir(ceniky_dir):
-        if filename.endswith(".csv"):
-            produkt = os.path.splitext(filename)[0]
-            path = os.path.join(ceniky_dir, filename)
-            df = pd.read_csv(path, index_col=0)
-            ceniky[produkt.lower()] = df
+    for file in os.listdir(cenik_dir):
+        if file.endswith(".csv"):
+            nazev = file.rsplit(".", 1)[0].strip().lower()
+            df = pd.read_csv(os.path.join(cenik_dir, file), index_col=0)
+            df.columns = df.columns.astype(str)
+            df.index = df.index.astype(str)
+            df.columns = df.columns.astype(float)
+            df.index = df.index.astype(float)
+            ceniky[nazev] = df
     sheet_names = list(ceniky.keys())
-    st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"\n📄 Načtené produkty z CSV: {sheet_names}\n"
+    st.session_state.debug_history += f"\n📁 Načteny ceníky: {sheet_names}\n"
 except Exception as e:
-    st.error(f"❌ Chyba při načítání CSV ceníků: {e}")
+    st.error(f"❌ Chyba při načítání ceníků: {e}")
     st.stop()
 
-# 📋 Formulář
-with st.form(key="vstupni_formular"):
+# === Formulář ===
+with st.form("formular"):
     user_input = st.text_area(
         "Zadejte popis produktů, rozměry a místo dodání:",
         height=100,
         placeholder="Např. ALUX Glass 6000x2500 Brno, screen 3500x2500..."
     )
-    submit_button = st.form_submit_button(label="📤 ODESLAT")
+    odeslat = st.form_submit_button("📤 ODESLAT")
 
-# 🔍 Zpracování vstupu
-if submit_button and user_input:
-    debug_text = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
-
+if odeslat and user_input:
+    debug = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
     with st.spinner("Analyzuji vstup pomocí GPT..."):
         try:
             client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -112,10 +105,9 @@ if submit_button and user_input:
                 f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(sheet_names)}. "
                 f"POZOR: Pokud uživatel napíše 'screen', 'screenová roleta', 'boční screen' — vždy to přiřaď k produktu 'screen'. "
                 f"Rozměry ve vzorcích (např. 3590-240) vždy spočítej. "
-                f"Vrať POUZE validní JSON. Např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"...\"}}]."
+                f"Vrať POUZE validní JSON. Např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}]"
             )
-            debug_text += f"\n📨 GPT prompt:\n{gpt_prompt}\n"
-
+            debug += f"\n📨 GPT prompt:\n{gpt_prompt}\n"
             response = client.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=[
@@ -124,119 +116,89 @@ if submit_button and user_input:
                 ],
                 max_tokens=1000
             )
+            gpt_raw = response.choices[0].message.content.strip()
+            debug += f"\n📬 GPT odpověď:\n{gpt_raw}\n"
 
-            gpt_output_raw = response.choices[0].message.content.strip()
-            debug_text += f"\n📬 GPT odpověď (RAW):\n{gpt_output_raw}\n"
+            start_idx = gpt_raw.find('[')
+            end_idx = gpt_raw.rfind(']') + 1
+            gpt_clean = gpt_raw[start_idx:end_idx]
+            produkty = json.loads(gpt_clean)
+            debug += f"\n📤 Parsováno:\n{json.dumps(produkty, indent=2)}\n"
 
-            start_idx = gpt_output_raw.find('[')
-            end_idx = gpt_output_raw.rfind(']') + 1
-            gpt_output_clean = gpt_output_raw[start_idx:end_idx]
-            debug_text += f"\n📦 GPT JSON blok:\n{gpt_output_clean}\n"
+            vysledek = []
 
-            products = json.loads(gpt_output_clean)
-            debug_text += f"\n📤 GPT parsed výstup:\n{json.dumps(products, indent=2)}\n"
+            for p in produkty:
+                produkt = p['produkt'].lower()
+                produkt_lookup = "screen" if "screen" in produkt else produkt
+                misto = p.get("misto", "")
 
-            all_rows = []
+                sirka = int(float(p["šířka"]))
+                vyska = (
+                    2500 if p['hloubka_výška'] is None and "screen" in produkt_lookup
+                    else int(float(p["hloubka_výška"]))
+                )
 
-            if products and 'nenalezeno' in products[0]:
-                zprava = products[0].get('zprava', 'Produkt nenalezen.')
-                st.warning(f"❗ {zprava}")
-                debug_text += f"\n⚠ {zprava}\n"
-            else:
-                produkt_map = {
-                    "screen": "screen", "alux screen": "screen",
-                    "screenová roleta": "screen", "boční screen": "screen"
-                }
+                debug += f"\n🔍 {produkt_lookup}: {sirka}×{vyska}, místo: {misto}\n"
 
-                for params in products:
-                    produkt = params['produkt'].strip().lower()
-                    produkt_lookup = produkt_map.get(produkt, produkt)
-                    misto = params.get("misto", "")
+                if produkt_lookup not in ceniky:
+                    debug += f"\n❌ Nenalezen ceník: {produkt_lookup}\n"
+                    continue
 
-                    try:
-                        sirka = int(float(params['šířka']))
-                        vyska_hloubka = (
-                            2500 if params['hloubka_výška'] is None and "screen" in produkt_lookup
-                            else int(float(params['hloubka_výška']))
-                        )
-                    except Exception as e:
-                        st.error(f"❌ Chybný rozměr: {e}")
-                        debug_text += f"\n❌ Chybný rozměr: {e}\n"
-                        continue
+                df = ceniky[produkt_lookup]
+                cols = sorted([float(c) for c in df.columns])
+                rows = sorted([float(r) for r in df.index])
+                real_sirka = next((c for c in cols if c >= sirka), cols[-1])
+                real_vyska = next((r for r in rows if r >= vyska), rows[-1])
+                debug += f"\n📊 Tabulka: šířky={cols}, výšky={rows}\n"
+                debug += f"\n📐 Použito: {real_sirka}×{real_vyska}\n"
 
-                    debug_text += f"\n🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}\n"
+                cena = df.loc[real_vyska, real_sirka]
+                debug += f"\n💰 Cena z tabulky: {cena} Kč\n"
 
-                    df = ceniky.get(produkt_lookup)
-                    if df is None:
-                        st.error(f"❌ Nenalezen ceník: {produkt_lookup}")
-                        debug_text += f"\n❌ Nenalezen ceník '{produkt_lookup}'\n"
-                        continue
+                vysledek.append({
+                    "POLOŽKA": produkt_lookup,
+                    "ROZMĚR": f"{sirka} × {vyska} mm",
+                    "CENA bez DPH": round(float(cena))
+                })
 
-                    sloupce = sorted([int(c) for c in df.columns])
-                    radky = sorted([int(r) for r in df.index])
+                if "screen" not in produkt_lookup:
+                    for perc in [12, 13, 14, 15]:
+                        cena_m = round(float(cena) * perc / 100)
+                        vysledek.append({
+                            "POLOŽKA": f"Montáž {perc}%",
+                            "ROZMĚR": "",
+                            "CENA bez DPH": cena_m
+                        })
+                        debug += f"\n🛠️ Montáž {perc}% = {cena_m} Kč\n"
 
-                    debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
+                if misto and misto.lower() not in ["neuvedeno", "nedodáno"]:
+                    km = get_distance_km("Blučina, Czechia", misto, st.secrets["GOOGLE_API_KEY"])
+                    if km:
+                        doprava = round(km * 2 * 15)
+                        vysledek.append({
+                            "POLOŽKA": "Doprava",
+                            "ROZMĚR": f"{km:.1f} km",
+                            "CENA bez DPH": doprava
+                        })
+                        debug += f"\n🚚 Doprava {km:.1f} km = {doprava} Kč\n"
 
-                    sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
-                    vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-                    debug_text += f"\n📐 Vybraná velikost: {sirka_real}×{vyska_real}\n"
+            st.session_state.vysledky.insert(0, vysledek)
+            debug += f"\n📦 Výstup:\n{pd.DataFrame(vysledek).to_string(index=False)}\n"
+            st.session_state.debug_history += debug
 
-                    try:
-                        cena = df.loc[vyska_real, str(sirka_real)]
-                        debug_text += f"\n💰 Cena nalezena: {cena} Kč\n"
-                    except Exception as e:
-                        st.error(f"❌ Cena nenalezena: {e}")
-                        debug_text += f"\n❌ Chyba při čtení ceny: {e}\n"
-                        continue
-
-                    all_rows.append({
-                        "POLOŽKA": produkt_lookup,
-                        "ROZMĚR": f"{sirka} × {vyska_hloubka} mm",
-                        "CENA bez DPH": round(float(cena))
-                    })
-
-                    if "screen" not in produkt_lookup:
-                        for perc in [12, 13, 14, 15]:
-                            cena_montaz = round(float(cena) * perc / 100)
-                            all_rows.append({
-                                "POLOŽKA": f"Montáž {perc}%",
-                                "ROZMĚR": "",
-                                "CENA bez DPH": cena_montaz
-                            })
-                            debug_text += f"\n🛠️ Montáž {perc}% = {cena_montaz} Kč\n"
-
-                    if misto and misto.lower() not in ["neuvedeno", "nedodáno"]:
-                        api_key = st.secrets["GOOGLE_API_KEY"]
-                        distance_km = get_distance_km("Blučina, Czechia", misto, api_key)
-                        if distance_km:
-                            cena_doprava = round(distance_km * 2 * 15)
-                            all_rows.append({
-                                "POLOŽKA": "Doprava",
-                                "ROZMĚR": f"{distance_km:.1f} km",
-                                "CENA bez DPH": cena_doprava
-                            })
-                            debug_text += f"\n🚚 Doprava {distance_km:.1f} km = {cena_doprava} Kč\n"
-
-            st.session_state.vysledky.insert(0, all_rows)
-            debug_text += f"\n📦 Výsledná tabulka:\n{pd.DataFrame(all_rows).to_string(index=False)}\n"
-            st.session_state.debug_history += debug_text
-
-        except json.JSONDecodeError as e:
-            st.error("❌ Chyba při zpracování JSON.")
-            st.session_state.debug_history += f"\n⛔ JSONDecodeError: {e}\n"
         except Exception as e:
-            st.error(f"❌ Výjimka: {e}")
+            st.error(f"❌ Chyba: {e}")
             st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
 
-# 📋 Výpis výsledků
+# === Výstupy ===
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
-    st.table(vysledek)
+    st.dataframe(pd.DataFrame(vysledek), use_container_width=True)
 
-# 🐞 Debug panel (20 % výšky)
+# === Debug panel ===
 st.markdown(
     f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; "
-    f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
+    f"background-color: #eeeeee; font-size: 10px; padding: 10px;'>"
     f"<pre>{st.session_state.debug_history}</pre></div>",
     unsafe_allow_html=True
 )
