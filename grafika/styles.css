@@ -1,34 +1,18 @@
 :root {
-    --bg-opacity: 0.5; /* nastav průhlednost zde (0 = průhledné, 1 = plné) */
+    --background-url: "https://raw.githubusercontent.com/davidopatsky/blank-app/main/grafika/pozadi_hlavni.PNG";
 }
 
-/* Globální pozadí */
 body {
-    background-image: url("grafika/pozadi_hlavni.PNG");
+    background-image: url(var(--background-url));
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
     background-repeat: no-repeat;
 }
 
-/* Poloprůhledná vrstva přes obsah */
+/* ostatní styly */
 main, .block-container {
-    background-color: rgba(255, 255, 255, var(--bg-opacity));
+    background-color: rgba(255, 255, 255, 0.85);
     padding: 1rem 2rem;
     border-radius: 12px;
-}
-
-/* Ostatní stylování */
-.main {
-    max-width: 80%;
-    margin: auto;
-}
-
-h1 {
-    font-size: 45px !important;
-    margin-top: 0 !important;
-}
-
-textarea {
-    font-family: monospace;
 }
