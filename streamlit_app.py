@@ -45,7 +45,7 @@ def set_background(image_path, opacity=0.2):
         unsafe_allow_html=True
     )
 
-set_background("grafika/pozadi_hlavni.png", opacity=0.2)
+set_background("grafika/pozadi_hlavni.PNG", opacity=0.2)
 
 # 🧠 Inicializace session
 if 'vysledky' not in st.session_state:
