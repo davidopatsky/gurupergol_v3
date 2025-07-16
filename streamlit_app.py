@@ -24,8 +24,6 @@ def set_background(image_path, opacity=0.2):
         </style>
     """, unsafe_allow_html=True)
 
-# 🖼️ Pozadí
-set_background("grafika/pozadi_hlavni.PNG", opacity=0.2)
 
 # 🧠 GPT klient
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
