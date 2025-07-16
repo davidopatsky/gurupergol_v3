@@ -2,20 +2,52 @@ import streamlit as st
 import pandas as pd
 import openai
 import json
-import requests
 import os
+import requests
+import base64
 
 st.set_page_config(layout="wide")
 
-# Styl
-st.markdown("""
-    <style>
-    .main { max-width: 80%; margin: auto; }
-    h1 { font-size: 45px !important; margin-top: 0 !important; }
-    </style>
-""", unsafe_allow_html=True)
+# 🔳 Styl a pozadí
+def set_background(image_path, opacity=0.2):
+    with open(image_path, "rb") as image_file:
+        encoded = base64.b64encode(image_file.read()).decode()
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{encoded}");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            position: relative;
+        }}
+        .stApp::before {{
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,{1 - opacity});
+            z-index: -1;
+        }}
+        .main > div > div > div > div {{
+            background-color: rgba(240,240,240,0.9);
+            padding: 10px;
+            border-radius: 10px;
+        }}
+        table {{
+            background-color: #f5f5f5 !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-# Inicializace session
+set_background("grafika/pozadi_hlavni.png", opacity=0.2)
+
+# 🧠 Inicializace session
 if 'vysledky' not in st.session_state:
     st.session_state.vysledky = []
 if 'debug_history' not in st.session_state:
@@ -23,7 +55,7 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# Funkce: výpočet vzdálenosti
+# 📍 Google Maps API – výpočet vzdálenosti
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -42,26 +74,24 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načtení všech CSV ceníků
-cenik_dir = "./ceniky"
+# 📂 Načti všechny CSV z adresáře 'ceniky'
+ceniky_dir = "ceniky"
 ceniky = {}
-sheet_names = []
-
 try:
-    for filename in os.listdir(cenik_dir):
+    for filename in os.listdir(ceniky_dir):
         if filename.endswith(".csv"):
-            name = filename.replace(".csv", "").strip()
-            path = os.path.join(cenik_dir, filename)
+            produkt = os.path.splitext(filename)[0]
+            path = os.path.join(ceniky_dir, filename)
             df = pd.read_csv(path, index_col=0)
-            ceniky[name.lower()] = df
-            sheet_names.append(name)
+            ceniky[produkt.lower()] = df
+    sheet_names = list(ceniky.keys())
     st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"\n📁 Načtené ceníky: {list(ceniky.keys())}\n"
+    st.session_state.debug_history += f"\n📄 Načtené produkty z CSV: {sheet_names}\n"
 except Exception as e:
     st.error(f"❌ Chyba při načítání CSV ceníků: {e}")
     st.stop()
 
-# Formulář pro vstup
+# 📋 Formulář
 with st.form(key="vstupni_formular"):
     user_input = st.text_area(
         "Zadejte popis produktů, rozměry a místo dodání:",
@@ -70,7 +100,7 @@ with st.form(key="vstupni_formular"):
     )
     submit_button = st.form_submit_button(label="📤 ODESLAT")
 
-# Zpracování vstupu
+# 🔍 Zpracování vstupu
 if submit_button and user_input:
     debug_text = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
 
@@ -136,33 +166,24 @@ if submit_button and user_input:
 
                     debug_text += f"\n🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    if produkt_lookup not in ceniky:
+                    df = ceniky.get(produkt_lookup)
+                    if df is None:
                         st.error(f"❌ Nenalezen ceník: {produkt_lookup}")
-                        debug_text += f"\n❌ Nenalezen ceník: {produkt_lookup}\n"
+                        debug_text += f"\n❌ Nenalezen ceník '{produkt_lookup}'\n"
                         continue
 
-                    df = ceniky[produkt_lookup]
+                    sloupce = sorted([int(c) for c in df.columns])
+                    radky = sorted([int(r) for r in df.index])
 
-                    try:
-                        df.columns = [int(float(c)) for c in df.columns]
-                        df.index = [int(float(i)) for i in df.index]
-                    except:
-                        st.error("❌ Sloupce nebo indexy nejsou čísla.")
-                        continue
-
-                    sloupce = sorted(df.columns)
-                    radky = sorted(df.index)
+                    debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                     vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-                    debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
-                    debug_text += f"\n📐 Použité rozměry v ceníku: {sirka_real}×{vyska_real}\n"
+                    debug_text += f"\n📐 Vybraná velikost: {sirka_real}×{vyska_real}\n"
 
                     try:
-                        cena = df.loc[vyska_real, sirka_real]
-                        debug_text += f"\n💰 Cena vrácena: {cena} Kč\n"
-                        if pd.isna(cena):
-                            raise ValueError("NaN v buňce")
+                        cena = df.loc[vyska_real, str(sirka_real)]
+                        debug_text += f"\n💰 Cena nalezena: {cena} Kč\n"
                     except Exception as e:
                         st.error(f"❌ Cena nenalezena: {e}")
                         debug_text += f"\n❌ Chyba při čtení ceny: {e}\n"
@@ -207,12 +228,12 @@ if submit_button and user_input:
             st.error(f"❌ Výjimka: {e}")
             st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
 
-# Výpis výsledků
+# 📋 Výpis výsledků
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (20 % výšky)
+# 🐞 Debug panel (20 % výšky)
 st.markdown(
     f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; "
     f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
