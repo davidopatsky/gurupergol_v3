@@ -3,16 +3,13 @@ import pandas as pd
 import openai
 import json
 import requests
+from debug import log
 
 st.set_page_config(layout="wide")
 
 # Styl
-st.markdown("""
-    <style>
-    .main { max-width: 80%; margin: auto; }
-    h1 { font-size: 45px !important; margin-top: 0 !important; }
-    </style>
-""", unsafe_allow_html=True)
+with open("grafika/styles.css", "r", encoding="utf-8") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # Inicializace session
 if 'vysledky' not in st.session_state:
@@ -32,9 +29,9 @@ def get_distance_km(origin, destination, api_key):
         'units': 'metric'
     }
     response = requests.get(url, params=params)
-    st.session_state.debug_history += f"\n📡 Google API Request: {response.url}\n"
+    log(f"📡 Google API Request: {response.url}")
     data = response.json()
-    st.session_state.debug_history += f"\n📬 Google API Response:\n{json.dumps(data, indent=2)}\n"
+    log(f"📬 Google API Response:\n{json.dumps(data, indent=2)}")
     try:
         return data['rows'][0]['elements'][0]['distance']['value'] / 1000
     except Exception as e:
@@ -47,12 +44,12 @@ try:
     excel_file = pd.ExcelFile(cenik_path)
     sheet_names = excel_file.sheet_names
     st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"\n📄 Načtené záložky: {sheet_names}\n"
+    log(f"📄 Načtené záložky: {sheet_names}")
 except Exception as e:
     st.error(f"❌ Nepodařilo se načíst Excel: {e}")
     st.stop()
 
-# Formulář pro vstup
+# Vstup od uživatele
 with st.form(key="vstupni_formular"):
     user_input = st.text_area(
         "Zadejte popis produktů, rozměry a místo dodání:",
@@ -61,20 +58,18 @@ with st.form(key="vstupni_formular"):
     )
     submit_button = st.form_submit_button(label="📤 ODESLAT")
 
+# Zpracování
 if submit_button and user_input:
-    debug_text = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
+    log(f"\n---\n📥 Uživatelský vstup:\n{user_input}")
 
     with st.spinner("Analyzuji vstup pomocí GPT..."):
         try:
             client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-            gpt_prompt = (
-                f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání. "
-                f"Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {', '.join(sheet_names)}. "
-                f"POZOR: Pokud uživatel napíše 'screen', 'screenová roleta', 'boční screen' — vždy to přiřaď k produktu 'screen'. "
-                f"Rozměry ve vzorcích (např. 3590-240) vždy spočítej. "
-                f"Vrať POUZE validní JSON. Např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}] nebo [{{\"nenalezeno\": true, \"zprava\": \"...\"}}]."
-            )
-            debug_text += f"\n📨 GPT prompt:\n{gpt_prompt}\n"
+
+            # Načtení promptu ze souboru
+            with open("prompty/gpt_vstup.txt", "r", encoding="utf-8") as f:
+                gpt_prompt = f.read().replace("{produkty}", ", ".join(sheet_names))
+            log(f"📨 GPT prompt:\n{gpt_prompt}")
 
             response = client.chat.completions.create(
                 model="gpt-4-turbo",
@@ -89,22 +84,19 @@ if submit_button and user_input:
             if not gpt_output_raw:
                 raise ValueError("GPT odpověď je prázdná.")
 
-            debug_text += f"\n📬 GPT odpověď (RAW):\n{gpt_output_raw}\n"
-
-            start_idx = gpt_output_raw.find('[')
-            end_idx = gpt_output_raw.rfind(']') + 1
-            gpt_output_clean = gpt_output_raw[start_idx:end_idx]
-            debug_text += f"\n📦 GPT JSON blok:\n{gpt_output_clean}\n"
+            log(f"📬 GPT odpověď (RAW):\n{gpt_output_raw}")
+            gpt_output_clean = gpt_output_raw[gpt_output_raw.find("["):gpt_output_raw.rfind("]") + 1]
+            log(f"📦 GPT JSON blok:\n{gpt_output_clean}")
 
             products = json.loads(gpt_output_clean)
-            debug_text += f"\n📤 GPT parsed výstup:\n{json.dumps(products, indent=2)}\n"
+            log(f"📤 GPT parsed výstup:\n{json.dumps(products, indent=2)}")
 
             all_rows = []
 
             if products and 'nenalezeno' in products[0]:
                 zprava = products[0].get('zprava', 'Produkt nenalezen.')
                 st.warning(f"❗ {zprava}")
-                debug_text += f"\n⚠ {zprava}\n"
+                log(f"⚠ {zprava}")
             else:
                 produkt_map = {
                     "screen": "screen", "alux screen": "screen",
@@ -124,15 +116,15 @@ if submit_button and user_input:
                         )
                     except Exception as e:
                         st.error(f"❌ Chybný rozměr: {e}")
-                        debug_text += f"\n❌ Chybný rozměr: {e}\n"
+                        log(f"❌ Chybný rozměr: {e}")
                         continue
 
-                    debug_text += f"\n🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}\n"
+                    log(f"🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}")
 
                     sheet_match = next((s for s in sheet_names if s.lower() == produkt_lookup), None)
                     if not sheet_match:
                         st.error(f"❌ Nenalezena záložka: {produkt_lookup}")
-                        debug_text += f"\n❌ Nenalezena záložka '{produkt_lookup}'\n"
+                        log(f"❌ Nenalezena záložka '{produkt_lookup}'")
                         continue
 
                     df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
@@ -142,20 +134,20 @@ if submit_button and user_input:
 
                     if not sloupce or not radky:
                         st.error(f"❌ Ceník '{sheet_match}' nemá správnou strukturu.")
-                        debug_text += f"\n❌ Prázdná matice v záložce '{sheet_match}'\n"
+                        log(f"❌ Prázdná matice v záložce '{sheet_match}'")
                         continue
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                     vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
-                    debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
-                    debug_text += f"\n📐 Vybraná velikost: {sirka_real}×{vyska_real}\n"
+                    log(f"📊 Matice – šířky: {sloupce}, výšky: {radky}")
+                    log(f"📐 Vybraná velikost z ceníku: {sirka_real} × {vyska_real}")
 
                     try:
                         cena = df.loc[vyska_real, sirka_real]
-                        debug_text += f"\n💰 Cena nalezena: {cena} Kč\n"
+                        log(f"💰 Cena nalezena: {cena} Kč (matice[{vyska_real}][{sirka_real}])")
                     except Exception as e:
                         st.error(f"❌ Cena nenalezena: {e}")
-                        debug_text += f"\n❌ Chyba při čtení ceny: {e}\n"
+                        log(f"❌ Chyba při čtení ceny: {e}")
                         continue
 
                     all_rows.append({
@@ -172,7 +164,7 @@ if submit_button and user_input:
                                 "ROZMĚR": "",
                                 "CENA bez DPH": cena_montaz
                             })
-                            debug_text += f"\n🛠️ Montáž {perc}% = {cena_montaz} Kč\n"
+                            log(f"🛠️ Montáž {perc}% = {cena_montaz} Kč")
 
                     if misto and misto.lower() not in ["neuvedeno", "nedodáno"]:
                         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -184,28 +176,24 @@ if submit_button and user_input:
                                 "ROZMĚR": f"{distance_km:.1f} km",
                                 "CENA bez DPH": cena_doprava
                             })
-                            debug_text += f"\n🚚 Doprava {distance_km:.1f} km = {cena_doprava} Kč\n"
+                            log(f"🚚 Doprava: {distance_km:.1f} km × 2 × 15 Kč = {cena_doprava} Kč")
 
             st.session_state.vysledky.insert(0, all_rows)
-            debug_text += f"\n📦 Výsledná tabulka:\n{pd.DataFrame(all_rows).to_string(index=False)}\n"
-            st.session_state.debug_history += debug_text
+            log(f"📦 Výsledná tabulka:\n{pd.DataFrame(all_rows).to_string(index=False)}")
 
         except json.JSONDecodeError as e:
             st.error("❌ Chyba při zpracování JSON.")
-            st.session_state.debug_history += f"\n⛔ JSONDecodeError: {e}\n"
+            log(f"⛔ JSONDecodeError: {e}")
         except Exception as e:
             st.error(f"❌ Výjimka: {e}")
-            st.session_state.debug_history += f"\n⛔ Výjimka: {e}\n"
+            log(f"⛔ Výjimka: {e}")
 
 # Výpis výsledků
 for idx, vysledek in enumerate(st.session_state.vysledky):
     st.write(f"### Výsledek {len(st.session_state.vysledky) - idx}")
     st.table(vysledek)
 
-# Debug panel (20 % výšky)
-st.markdown(
-    f"<div style='position: fixed; bottom: 0; left: 0; right: 0; height: 20%; overflow-y: scroll; "
-    f"background-color: #f0f0f0; font-size: 10px; padding: 10px;'>"
-    f"<pre>{st.session_state.debug_history}</pre></div>",
-    unsafe_allow_html=True
-)
+# Debug collapsible panel
+with st.expander("🪛 Zobrazit podrobný debug log", expanded=False):
+    st.markdown("### Debug log (včetně výpočtů, záložek, vzdáleností atd.)")
+    st.code(st.session_state.debug_history[-20000:], language="text")
