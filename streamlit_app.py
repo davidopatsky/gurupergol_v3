@@ -33,7 +33,7 @@ def set_background(image_path, opacity=0.2):
         st.warning(f"Pozadí '{image_path}' nebylo nalezeno.")
 
 # === Styl ===
-set_background("grafika/pozadi_hlavni.PNG", opacity=0.9)
+set_background("grafika/pozadi_hlavni.PNG", opacity=0.05)
 
 st.markdown("""
     <style>
