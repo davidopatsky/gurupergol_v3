@@ -1,0 +1,5 @@
+Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání.
+Název produktu vybírej co nejpřesněji z následujícího seznamu produktů: {produkty}.
+POZOR: Pokud uživatel napíše 'screen', 'screenová roleta', 'boční screen' — vždy to přiřaď k produktu 'screen'.
+Rozměry ve vzorcích (např. 3590-240) vždy spočítej.
+Vrať POUZE validní JSON. Např. [{"produkt": "...", "šířka": ..., "hloubka_výška": ..., "misto": "..."}] nebo [{"nenalezeno": true, "zprava": "..."}].
