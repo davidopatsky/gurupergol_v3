@@ -3,6 +3,7 @@ import pandas as pd
 import openai
 import json
 import requests
+import os
 
 st.set_page_config(layout="wide")
 
@@ -22,7 +23,7 @@ if 'debug_history' not in st.session_state:
 
 st.title("Asistent cenových nabídek od Davida")
 
-# Funkce: vzdálenost
+# Funkce: výpočet vzdálenosti
 def get_distance_km(origin, destination, api_key):
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
@@ -41,15 +42,23 @@ def get_distance_km(origin, destination, api_key):
         st.error(f"❌ Chyba při získávání vzdálenosti: {e}")
         return None
 
-# Načtení Excelu
-cenik_path = "./data/ALUX_pricelist_CZK_2025 simplified chatgpt v7.xlsx"
+# Načtení všech CSV ceníků
+cenik_dir = "./ceniky"
+ceniky = {}
+sheet_names = []
+
 try:
-    excel_file = pd.ExcelFile(cenik_path)
-    sheet_names = excel_file.sheet_names
+    for filename in os.listdir(cenik_dir):
+        if filename.endswith(".csv"):
+            name = filename.replace(".csv", "").strip()
+            path = os.path.join(cenik_dir, filename)
+            df = pd.read_csv(path, index_col=0)
+            ceniky[name.lower()] = df
+            sheet_names.append(name)
     st.session_state.sheet_names = sheet_names
-    st.session_state.debug_history += f"\n📄 Načtené záložky: {sheet_names}\n"
+    st.session_state.debug_history += f"\n📁 Načtené ceníky: {list(ceniky.keys())}\n"
 except Exception as e:
-    st.error(f"❌ Nepodařilo se načíst Excel: {e}")
+    st.error(f"❌ Chyba při načítání CSV ceníků: {e}")
     st.stop()
 
 # Formulář pro vstup
@@ -61,6 +70,7 @@ with st.form(key="vstupni_formular"):
     )
     submit_button = st.form_submit_button(label="📤 ODESLAT")
 
+# Zpracování vstupu
 if submit_button and user_input:
     debug_text = f"\n---\n📥 Uživatelský vstup:\n{user_input}\n"
 
@@ -86,9 +96,6 @@ if submit_button and user_input:
             )
 
             gpt_output_raw = response.choices[0].message.content.strip()
-            if not gpt_output_raw:
-                raise ValueError("GPT odpověď je prázdná.")
-
             debug_text += f"\n📬 GPT odpověď (RAW):\n{gpt_output_raw}\n"
 
             start_idx = gpt_output_raw.find('[')
@@ -129,30 +136,33 @@ if submit_button and user_input:
 
                     debug_text += f"\n🔍 Produkt: {produkt_lookup}, rozměr: {sirka}×{vyska_hloubka}, místo: {misto}\n"
 
-                    sheet_match = next((s for s in sheet_names if s.lower() == produkt_lookup), None)
-                    if not sheet_match:
-                        st.error(f"❌ Nenalezena záložka: {produkt_lookup}")
-                        debug_text += f"\n❌ Nenalezena záložka '{produkt_lookup}'\n"
+                    if produkt_lookup not in ceniky:
+                        st.error(f"❌ Nenalezen ceník: {produkt_lookup}")
+                        debug_text += f"\n❌ Nenalezen ceník: {produkt_lookup}\n"
                         continue
 
-                    df = pd.read_excel(cenik_path, sheet_name=sheet_match, index_col=0)
+                    df = ceniky[produkt_lookup]
 
-                    sloupce = sorted([int(c) for c in df.columns if isinstance(c, (int, float))])
-                    radky = sorted([int(r) for r in df.index if isinstance(r, (int, float))])
-
-                    if not sloupce or not radky:
-                        st.error(f"❌ Ceník '{sheet_match}' nemá správnou strukturu.")
-                        debug_text += f"\n❌ Prázdná matice v záložce '{sheet_match}'\n"
+                    try:
+                        df.columns = [int(float(c)) for c in df.columns]
+                        df.index = [int(float(i)) for i in df.index]
+                    except:
+                        st.error("❌ Sloupce nebo indexy nejsou čísla.")
                         continue
+
+                    sloupce = sorted(df.columns)
+                    radky = sorted(df.index)
 
                     sirka_real = next((s for s in sloupce if s >= sirka), sloupce[-1])
                     vyska_real = next((v for v in radky if v >= vyska_hloubka), radky[-1])
                     debug_text += f"\n📊 Matice – šířky: {sloupce}, výšky: {radky}\n"
-                    debug_text += f"\n📐 Vybraná velikost: {sirka_real}×{vyska_real}\n"
+                    debug_text += f"\n📐 Použité rozměry v ceníku: {sirka_real}×{vyska_real}\n"
 
                     try:
                         cena = df.loc[vyska_real, sirka_real]
-                        debug_text += f"\n💰 Cena nalezena: {cena} Kč\n"
+                        debug_text += f"\n💰 Cena vrácena: {cena} Kč\n"
+                        if pd.isna(cena):
+                            raise ValueError("NaN v buňce")
                     except Exception as e:
                         st.error(f"❌ Cena nenalezena: {e}")
                         debug_text += f"\n❌ Chyba při čtení ceny: {e}\n"
