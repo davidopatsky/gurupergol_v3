@@ -1,71 +1,66 @@
 import streamlit as st
 import pandas as pd
-import openai
-import json
 import requests
-import os
+import json
+import openai
 
+# Nastavení
 st.set_page_config(layout="wide")
+st.title("🧮 Cenový asistent – ALUX")
 
-# --- INIT ---
-st.title("Asistent cenových nabídek od Davida")
-st.markdown("## 🔧 Zadání parametrů a výpočet cen")
+# Inicializace stavů
+if "debug" not in st.session_state:
+    st.session_state.debug = ""
+if "ceniky" not in st.session_state:
+    st.session_state.ceniky = {}
+if "sheet_names" not in st.session_state:
+    st.session_state.sheet_names = []
 
-# --- DEBUG STORAGE ---
-if "debug_log" not in st.session_state:
-    st.session_state.debug_log = ""
+# ⏬ Načti seznam ceníků ze souboru v hlavním adresáři
+debug_log = ""
+try:
+    with open("seznam_ceniku.txt", "r", encoding="utf-8") as f:
+        radky = f.readlines()
 
-def log(text):
-    st.session_state.debug_log += str(text) + "\n"
+    for radek in radky:
+        if " - " not in radek:
+            continue
+        nazev, url = radek.strip().split(" - ", 1)
+        try:
+            df = pd.read_csv(url)
+            df.columns = df.columns.astype(str)
+            df.index = df.index.astype(str)
+            st.session_state.ceniky[nazev.strip()] = df
+            st.session_state.sheet_names.append(nazev.strip())
+            debug_log += f"✅ Načten ceník: {nazev.strip()} ({df.shape})\n"
+        except Exception as e:
+            debug_log += f"❌ Chyba při načítání {nazev.strip()}: {e}\n"
+except FileNotFoundError:
+    st.error("❌ Soubor `seznam_ceniku.txt` nebyl nalezen v hlavním adresáři.")
+    st.stop()
 
-# --- CONFIG ---
-SEZNAM_SOUBORU = "seznam_ceniku.txt"  # format: Nazev - https://link
-
-# --- FUNKCE: Načtení všech ceníků ze seznamu ---
-def load_all_price_sheets():
-    df_dict = {}
-    try:
-        with open(SEZNAM_SOUBORU, "r") as f:
-            lines = f.readlines()
-            for line in lines:
-                if " - " in line:
-                    name, url = line.strip().split(" - ", 1)
-                    df = pd.read_csv(url)
-                    df.columns = df.columns.astype(str)
-                    df.index = df.iloc[:, 0]
-                    df = df.drop(df.columns[0], axis=1)
-                    df_dict[name.strip()] = df
-                    log(f"✅ Načten ceník: {name.strip()} {df.shape}")
-    except Exception as e:
-        log(f"❌ Chyba při načítání ceníků: {e}")
-    return df_dict
-
-ceniky = load_all_price_sheets()
-
-# --- ZOBRAZENÍ TABULEK V EXPANDERU ---
-with st.expander("📊 Náhled všech načtených ceníků"):
-    for name, df in ceniky.items():
-        st.markdown(f"#### {name}")
+# 📊 Náhled všech tabulek – rozbalovací box
+with st.expander("📂 Zobrazit všechny načtené tabulky"):
+    for nazev, df in st.session_state.ceniky.items():
+        st.write(f"### {nazev}")
         st.dataframe(df)
 
-# --- VSTUP OD UŽIVATELE ---
-user_input = st.text_area("Zadejte popis produktů, rozměry a místo dodání:",
-                          placeholder="Např. ALUX Glass 6000x2500 Brno")
-if st.button("📤 ODESLAT"):
-    log("\n---\n📥 Uživatelský vstup:")
-    log(user_input)
+# 📥 Uživatelský vstup
+st.subheader("📝 Zadejte popis produktů")
+prompt = st.text_area("Např. ALUX Bioclimatic 5990x4500", height=100)
+odeslat = st.button("📤 Odeslat")
 
-    # --- GPT PROMPT ---
+if odeslat and prompt.strip():
+    debug_log += f"\n📥 Uživatelský vstup: {prompt.strip()}\n"
+
+    # 🔎 Vytvoření promptu pro GPT
     gpt_prompt = (
-        f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), "
-        f"hloubkou nebo výškou (v mm) a místem dodání. Název produktu vybírej co nejpřesněji z tohoto seznamu: "
-        f"{', '.join(ceniky.keys())}. Fráze jako 'screen', 'screenová roleta' vždy přiřaď k produktu 'screen'. "
-        f"Rozměry ve formátu jako 3500-250 dopočítej. Vrať POUZE validní JSON list, např. "
-        f"[{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}]"
+        f"Tvůj úkol: z následujícího textu vytáhni VŠECHNY produkty, každý se svým názvem, šířkou (v mm), hloubkou nebo výškou (v mm) a místem dodání.\n"
+        f"Název produktu vybírej co nejpřesněji z tohoto seznamu: {', '.join(st.session_state.sheet_names)}.\n"
+        f"Fráze jako 'screen', 'screenová roleta' vždy přiřaď k produktu 'screen'.\n"
+        f"Rozměry ve formátu jako 3500-250 vždy převeď na šířku a výšku v mm.\n"
+        f"Vrať POUZE validní JSON list, např. [{{\"produkt\": \"...\", \"šířka\": ..., \"hloubka_výška\": ..., \"misto\": \"...\"}}]"
     )
-
-    log("\n📨 GPT PROMPT:")
-    log(gpt_prompt)
 
     try:
         client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -73,45 +68,49 @@ if st.button("📤 ODESLAT"):
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": gpt_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            max_tokens=1000
+                {"role": "user", "content": prompt}
+            ]
         )
-        gpt_output = response.choices[0].message.content.strip()
-        log("\n📬 GPT odpověď:")
-        log(gpt_output)
+        gpt_output_raw = response.choices[0].message.content.strip()
+        debug_log += f"\n📨 GPT odpověď:\n{gpt_output_raw}\n"
 
-        data = json.loads(gpt_output)
+        products = json.loads(gpt_output_raw)
+        for item in products:
+            produkt = item["produkt"]
+            sirka = int(item["šířka"])
+            vyska = int(item["hloubka_výška"])
+            misto = item.get("misto", "")
 
-        for zaznam in data:
-            produkt = zaznam["produkt"].strip()
-            sirka = int(float(zaznam["šířka"]))
-            vyska = int(float(zaznam["hloubka_výška"]))
-            log(f"\n📐 Rozměr požadovaný: {sirka}×{vyska}")
+            debug_log += f"\n📦 Požadavek: {produkt} {sirka}×{vyska} ({misto})"
 
-            if produkt not in ceniky:
-                log(f"❌ Ceník nenalezen: {produkt}")
+            if produkt not in st.session_state.ceniky:
+                debug_log += f"\n❌ Ceník nenalezen: {produkt}"
                 continue
 
-            df = ceniky[produkt]
-            cols = [int(float(c)) for c in df.columns]
-            rows = [int(float(r)) for r in df.index]
+            df = st.session_state.ceniky[produkt]
+            df.columns = [c.strip() for c in df.columns]
+            df.index = [i.strip() for i in df.index]
 
-            sirka_real = next((x for x in cols if x >= sirka), cols[-1])
-            vyska_real = next((y for y in rows if y >= vyska), rows[-1])
-            log(f"📐 Použitý rozměr: {sirka_real}×{vyska_real}")
+            sloupce = sorted([int(float(c)) for c in df.columns if str(c).isdigit() or str(c).replace('.', '').isdigit()])
+            radky = sorted([int(float(i)) for i in df.index if str(i).isdigit() or str(i).replace('.', '').isdigit()])
+
+            sirka_real = next((x for x in sloupce if x >= sirka), sloupce[-1])
+            vyska_real = next((y for y in radky if y >= vyska), radky[-1])
+            debug_log += f"\n📐 Rozměr požadovaný: {sirka}×{vyska}, použitý: {sirka_real}×{vyska_real}"
 
             try:
-                hodnota = df.loc[str(vyska_real)][str(sirka_real)]
-                log(f"📤 Hodnota z df.loc[{vyska_real}, {sirka_real}] = {hodnota}")
-                cena = float(str(hodnota).replace(" ", "").replace(",", "."))
-                st.success(f"{produkt} {sirka}×{vyska} mm = {int(cena)} Kč bez DPH")
+                hodnota = df.loc[str(vyska_real), str(sirka_real)]
+                debug_log += f"\n📤 Hodnota z df.loc[{vyska_real}, {sirka_real}] = {hodnota}"
+                cena = round(float(hodnota))
+                st.success(f"{produkt} {sirka_real}×{vyska_real} mm → {cena} Kč bez DPH")
             except Exception as e:
-                log(f"❌ Chyba při zpracování: {e}")
+                debug_log += f"\n❌ Chyba při zpracování: {e}"
+                st.error(f"Chyba při načítání ceny pro {produkt} {sirka_real}×{vyska_real}")
 
     except Exception as e:
-        log(f"❌ GPT chyba: {e}")
+        debug_log += f"\n❌ GPT výjimka: {e}"
+        st.error("❌ Chyba při komunikaci s GPT nebo zpracování dat.")
 
-# --- DEBUG LOG ---
-st.markdown("## 🐞 Debug log")
-st.text_area("Log výpočtu", value=st.session_state.debug_log, height=400)
+# 🧾 Debug panel
+with st.expander("🛠️ Debug log"):
+    st.text_area("Log výpočtu", value=debug_log + "\n" + st.session_state.debug, height=300)
