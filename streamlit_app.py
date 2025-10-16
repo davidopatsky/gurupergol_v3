@@ -32,12 +32,16 @@ def nacti_ceniky():
     nacitene = {}
     for produkt, url in cenik_urls.items():
         try:
-            df = pd.read_csv(url)
-            df.columns = [c.strip() for c in df.columns]
-            df.index = [i.strip() for i in df.iloc[:, 0]]
+            df = pd.read_csv(url, dtype=str)  # všechno načíst jako string
+            df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)  # očistit mezery
+
+            # První sloupec bude index (hodnoty výšek)
+            df.index = df.iloc[:, 0].astype(float).astype(int)
             df = df.drop(df.columns[0], axis=1)
-            df.columns = [int(str(c).strip()) for c in df.columns]
-            df.index = [int(str(i).strip()) for i in df.index]
+
+            # Hlavičky (šířky)
+            df.columns = [int(float(c)) for c in df.columns]
+
             nacitene[produkt.lower()] = df
             log(f"✅ Načteno: {produkt} ({df.shape})")
         except Exception as e:
