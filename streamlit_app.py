@@ -1,45 +1,57 @@
 import streamlit as st
 import pandas as pd
-import os
+import requests
+import io
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Náhled všech produktových ceníků z Google Sheets")
+st.title("🧠 Asistent cenových nabídek")
 
-# Testovací listy z Google Sheets (musí být publikované jako CSV)
-# Formát: "název_záložky": "url_odkazu"
-ceniky_google_sheets = {
-    "ALUX Bioclimatic": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_CHUuFGLItFD-2lpokd9vOecKiY3Z93sW6rSsU2zjQnHhRIiTdRGd0DO9yhItqg/pub?output=csv"
-    # Přidej další listy sem
-    # "ALUX Thermo": "https://...",
-    # "Strada GLASS": "https://..."
-}
+# Inicializace datových struktur
+if 'df_dict' not in st.session_state:
+    st.session_state.df_dict = {}
+if 'debug_log' not in st.session_state:
+    st.session_state.debug_log = ""
 
-# Debug výstup (živý log)
-debug_log = "\n📥 Načítání ceníků ze vzdálených CSV (Google Sheets):\n"
+# 🧩 1. Načtení ceníků ze souboru
+CENIKY_SEZNAM_PATH = "ceniky_list.txt"  # Textový soubor: název, odkaz
 
-# Zobrazení každého ceníku
-for nazev, url in ceniky_google_sheets.items():
+def nacti_ceniky():
     try:
-        df = pd.read_csv(url, encoding="utf-8", sep=",")
-
-        # Pokus o převedení všech hodnot na čísla, kde to jde
-        df = df.apply(pd.to_numeric, errors='ignore')
-
-        # Uložení do session (nepovinné)
-        st.session_state[nazev] = df
-
-        debug_log += f"✅ {nazev} – tvar: {df.shape}\n"
-
-        with st.expander(f"📄 Náhled ceníku: {nazev} ({df.shape[0]}×{df.shape[1]})", expanded=False):
-            st.dataframe(df.style.set_properties(**{
-                'background-color': '#f3f3f3',
-                'color': '#000000'
-            }), use_container_width=True)
-
+        with open(CENIKY_SEZNAM_PATH, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                if "," not in line:
+                    continue
+                nazev, url = [x.strip() for x in line.split(",", 1)]
+                response = requests.get(url)
+                if response.status_code == 200:
+                    df = pd.read_csv(io.StringIO(response.text), index_col=0)
+                    st.session_state.df_dict[nazev] = df
+                    st.session_state.debug_log += f"✅ Načten ceník: {nazev} ({df.shape})\n"
+                else:
+                    st.session_state.debug_log += f"❌ Chyba při načítání {nazev}: {response.status_code}\n"
     except Exception as e:
-        debug_log += f"❌ {nazev} – chyba: {e}\n"
+        st.error(f"❌ Nelze načíst seznam ceníků: {e}")
+        st.stop()
 
-# Výpis živého logu
-with st.expander("🪵 Debug log načítání", expanded=True):
-    st.text(debug_log)
+nacti_ceniky()
+
+# 📤 2. Zadání popisu pro asistenta
+with st.form("formular"):
+    vstup = st.text_area("Zadejte popis produktů", height=100, placeholder="Např. ALUX Glass 6000x2500, screen 3500x2500")
+    odeslat = st.form_submit_button("📤 Odeslat")
+
+if odeslat and vstup:
+    st.session_state.debug_log += f"\n📥 Uživatelský vstup: {vstup}\n"
+    # ... zde by byla logika volání GPT, výpočtů, interpolací atd.
+
+# 🧾 3. Debug log zobrazený rovnou
+with st.expander("🛠️ Debug log"):
+    st.text_area("Log:", st.session_state.debug_log, height=250)
+
+# 📊 4. Náhled všech načtených tabulek – skryto ve výchozím stavu
+with st.expander("📊 Náhled všech načtených ceníků (rozklikněte)"):
+    for name, df in st.session_state.df_dict.items():
+        st.markdown(f"#### {name}")
+        st.dataframe(df, height=250)
