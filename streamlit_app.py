@@ -143,3 +143,7 @@ for idx, tab in enumerate(st.session_state.vysledky):
 # ---------- 🐛 DEBUG PANEL ----------
 st.markdown("### 🐛 Debug log")
 st.text_area("Log:", st.session_state.debug_log, height=300, key="log_panel")
+
+# 🪵 Zobrazení kompletního debug logu v aplikaci
+with st.expander("🪵 DEBUG LOG", expanded=True):
+    st.text_area("Detailní záznam průběhu výpočtu:", st.session_state.debug_log, height=400)
