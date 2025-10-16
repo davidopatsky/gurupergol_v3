@@ -10,15 +10,15 @@ from io import StringIO
 # ZÁKLAD
 # ===============================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – s dopravou")
+st.title("🧠 Cenový asistent – doprava + montáže")
 
 # Session
 if "LOG" not in st.session_state:
     st.session_state.LOG = []
 if "CENIKY" not in st.session_state:
-    st.session_state.CENIKY = {}   # dict[str(lower) -> DataFrame]
+    st.session_state.CENIKY = {}   # dict[str(lower) -> DataFrame maticově]
 if "PRODUKTY" not in st.session_state:
-    st.session_state.PRODUKTY = [] # hezké názvy pro prompt
+    st.session_state.PRODUKTY = [] # názvy pro prompt, tak jak jsou v txt
 
 def log(msg: str):
     st.session_state.LOG.append(str(msg))
@@ -31,13 +31,19 @@ def show_log():
 # ===============================
 SEZNAM_PATH = "seznam_ceniku.txt"
 ORIGIN_PLACE = "Blučina, Czechia"
-Kc_per_km_oneway = 15  # Kč / km (jednosměrně). Celkem počítáme tam+zpět → *2
+KC_PER_KM_ONEWAY = 15  # Kč / km (jednosměrně)
+MONT_PERC = [12, 13, 14, 15]  # vždy přidáme pro každý produkt
 
 def cwd_and_existence_probe():
     log(f"📂 CWD: {os.getcwd()}")
     log(f"🔎 exists('{SEZNAM_PATH}')? {os.path.exists(SEZNAM_PATH)}")
 
 def read_seznam_ceniku():
+    """
+    Čte 'seznam_ceniku.txt' a vrátí list (name, url).
+    Podporuje oddělovač ' - ' i ' – '.
+    Přeskakuje prázdné a komentované řádky (#).
+    """
     pairs = []
     try:
         with open(SEZNAM_PATH, "r", encoding="utf-8") as f:
@@ -54,10 +60,9 @@ def read_seznam_ceniku():
             else:
                 log(f"⚠️ Řádek {i} přeskočen (chybí ' - ' nebo ' – '): {raw}")
                 continue
-            name = name.strip()
-            url = url.strip()
+            name, url = name.strip(), url.strip()
             if not name or not url:
-                log(f"⚠️ Řádek {i} má prázdný název/URL: {raw}")
+                log(f"⚠️ Řádek {i}: prázdný název/URL: {raw}")
                 continue
             pairs.append((name, url))
         log(f"✅ Zparsováno {len(pairs)} položek ze seznamu")
@@ -75,13 +80,23 @@ def fetch_csv(url: str) -> pd.DataFrame | None:
             return None
         df = pd.read_csv(StringIO(r.text))
         log(f"✅ CSV načteno: shape={df.shape}")
-        log("👀 Náhled CSV (3 řádky):\n" + df.head(3).to_string(index=False))
+        # ukázka prvních 3 řádků
+        try:
+            log("👀 Náhled CSV (3 řádky):\n" + df.head(3).to_string(index=False))
+        except Exception:
+            pass
         return df
     except Exception as e:
         log(f"❌ Chyba při stahování CSV: {e}")
         return None
 
 def normalize_numeric_token(x) -> int | None:
+    """
+    Vyčistí token a vrátí int (pro hlavičky/indexy):
+    - odstraňuje NBSP, mezery, tečky (tisícovky), měnu, 'mm'
+    - čárku → tečka
+    - najde číslo, převede na float → int
+    """
     if pd.isna(x):
         return None
     s = str(x).strip()
@@ -93,37 +108,52 @@ def normalize_numeric_token(x) -> int | None:
     if not m:
         return None
     try:
-        val = float(m.group(0))
-        return int(round(val))
+        return int(round(float(m.group(0))))
     except Exception:
         return None
 
 def coerce_matrix(df: pd.DataFrame) -> pd.DataFrame | None:
+    """
+    Převede obecně vyexportovaný CSV na matici:
+    - první sloupec = výšky (index),
+    - hlavičky sloupců = šířky,
+    - tělo = ceny (float).
+    Pokud první sloupec nevypadá numerický, zkusí transponovat.
+    """
     if df is None or df.empty:
         log("⚠️ Prázdný DF, nelze převést na matici.")
         return None
+
     first_col = df.columns[0]
     idx_try = [normalize_numeric_token(v) for v in df[first_col]]
     numerics_ratio = sum(v is not None for v in idx_try) / max(1, len(idx_try))
+
     if numerics_ratio > 0.6:
         df2 = df.copy()
         df2.index = idx_try
         df2 = df2.drop(columns=[first_col])
     else:
         df2 = df.copy()
+
     new_cols = [normalize_numeric_token(c) for c in df2.columns]
     if sum(c is not None for c in new_cols) < len(new_cols) * 0.6:
         log("↔️ Sloupce nevypadají numericky, transponuji…")
         df2 = df2.T
         new_cols = [normalize_numeric_token(c) for c in df2.columns]
         df2.index = [normalize_numeric_token(i) for i in df2.index]
+
     df2.columns = new_cols
     df2.index = [normalize_numeric_token(i) for i in df2.index]
+
+    # drop None
     df2 = df2.loc[[i for i in df2.index if i is not None],
                   [c for c in df2.columns if c is not None]]
+
+    # tělo na float (kde to jde)
     for c in df2.columns:
         df2[c] = pd.to_numeric(df2[c], errors="coerce")
-    log(f"🧩 Matice připravena: shape={df2.shape}")
+
+    log(f"🧩 Matice připravena: shape={df2.shape} (index/kolony int)")
     return df2
 
 def nearest_ge(values: list[int], want: int) -> int:
@@ -147,46 +177,28 @@ def find_price(df_mat: pd.DataFrame, width: int, height: int):
 def get_distance_km(origin: str, destination: str, api_key: str) -> float | None:
     try:
         url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-        params = {
-            "origins": origin, "destinations": destination,
-            "key": api_key, "units": "metric"
-        }
+        params = {"origins": origin, "destinations": destination, "key": api_key, "units": "metric"}
         log(f"📡 Google API Request: {url}?origins={origin}&destinations={destination}&units=metric")
         r = requests.get(url, params=params, timeout=20)
         log(f"📬 Google API HTTP {r.status_code}")
-        data = r.json()
-        # pro přehlednost jen shrnutí
-        try:
-            summary = {
-                "status": data.get("status"),
-                "rows": len(data.get("rows", [])),
-                "elements_status": (
-                    data["rows"][0]["elements"][0].get("status")
-                    if data.get("rows") and data["rows"][0].get("elements") else "?"
-                )
-            }
-            log(f"📦 Google API Summary: {summary}")
-        except Exception:
-            pass
         if r.status_code != 200:
             return None
+        data = r.json()
         el = data["rows"][0]["elements"][0]
         if el.get("status") != "OK":
             log(f"⚠️ Distance element status: {el.get('status')}")
             return None
-        meters = el["distance"]["value"]
-        km = meters / 1000.0
-        log(f"🛣️ Distance = {km:.2f} km")
+        km = el["distance"]["value"] / 1000.0
+        log(f"🛣️ {origin} → {destination} = {km:.2f} km")
         return km
     except Exception as e:
         log(f"❌ Distance API error: {e}")
         return None
 
 def extract_place_from_input(user_text: str) -> str | None:
-    # pokus: vezmi text za POSLEDNÍ čárkou
+    # fallback: vezmi text za poslední čárkou jako místo
     if "," in user_text:
         tail = user_text.split(",")[-1].strip()
-        # krátké validace
         if len(tail) >= 2:
             return tail
     return None
@@ -200,6 +212,7 @@ def load_all_ceniky():
     pairs = read_seznam_ceniku()
     st.session_state.CENIKY.clear()
     st.session_state.PRODUKTY.clear()
+
     for name, url in pairs:
         raw = fetch_csv(url)
         if raw is None:
@@ -207,22 +220,25 @@ def load_all_ceniky():
             continue
         mat = coerce_matrix(raw)
         if mat is None or mat.empty:
-            log(f"⚠️ {name}: po převodu na matici je DF prázdný.")
+            log(f"⚠️ {name}: po převodu na matici prázdné.")
             continue
         st.session_state.CENIKY[name.lower()] = mat
         st.session_state.PRODUKTY.append(name)
+        # shrnutí rozměrů
         try:
             cols = sorted([int(c) for c in mat.columns])
             rows = sorted([int(r) for r in mat.index])
-            log(f"📏 {name}: šířky {cols[0]}–{cols[-1]} | výšky {rows[0]}–{rows[-1]} (kroků: {len(cols)}×{len(rows)})")
+            log(f"📏 {name}: šířky {cols[0]}–{cols[-1]} | výšky {rows[0]}–{rows[-1]} (kroky: {len(cols)}×{len(rows)})")
         except Exception:
             pass
 
+# UI: reload ceníků
 colA, colB = st.columns([1,1])
 with colA:
     if st.button("♻️ Znovu načíst ceníky"):
         load_all_ceniky()
 
+# Auto-load při prvním spuštění
 if not st.session_state.CENIKY:
     load_all_ceniky()
 
@@ -242,10 +258,10 @@ with st.expander("📂 Zobrazit všechny načtené tabulky"):
                 st.warning("Ceník není načten.")
 
 # ===============================
-# VÝPOČET CEN + DOPRAVA (TEXTOVÝ VSTUP)
+# VÝPOČET CEN (GPT) + DOPRAVA + MONTÁŽE
 # ===============================
 st.markdown("---")
-st.subheader("📝 Výpočet cen podle textového vstupu (s dopravou)")
+st.subheader("📝 Výpočet cen podle textového vstupu (s dopravou a montážemi)")
 
 with st.form("calc_form"):
     user_text = st.text_area(
@@ -258,16 +274,18 @@ if submitted and user_text.strip():
     log("\n---")
     log(f"📥 Uživatelský vstup:\n{user_text}")
 
+    # seznam produktů pro GPT
     product_list = ", ".join(st.session_state.PRODUKTY) if st.session_state.PRODUKTY else "screen"
     system_prompt = (
-        "Tvůj úkol: z následujícího textu vytáhni VŠECHNY položky s názvem produktu, šířkou (mm), výškou (mm) "
-        "a MÍSTEM dodání (pokud je uvedeno). Název produktu vybírej co nejpřesněji z tohoto seznamu: "
-        f"{product_list}. Fráze jako 'screen', 'screenová roleta' přiřaď k produktu 'screen'. "
-        "Rozměry jako 3500-250 nejprve spočítej a výstup dej jako čistá čísla v mm. "
-        "Místo vrať jako text, pokud v zadání není, dej prázdný řetězec. "
+        "Z textu vytáhni VŠECHNY položky s názvem produktu, šířkou (mm), výškou (mm) a místem dodání (pokud je uvedeno). "
+        f"Název produktu vybírej co nejpřesněji z tohoto seznamu: {product_list}. "
+        "Fráze 'screen', 'screenová roleta' přiřaď k produktu 'screen'. "
+        "Rozměry typu 3500-250 nejprve spočítej a výstup dej jako čistá čísla v mm. "
+        "Místo vrať jako text; když není, dej prázdný řetězec. "
         "Vrať POUZE validní JSON list, např. "
         "[{\"produkt\":\"ALUX Bioclimatic\",\"šířka\":5990,\"hloubka_výška\":4500,\"misto\":\"Praha\"}]"
     )
+
     # --- GPT
     items = []
     try:
@@ -292,7 +310,7 @@ if submitted and user_text.strip():
         log(f"❌ GPT chyba: {e}")
         items = []
 
-    # Fallback extrakce místa z textu (za poslední čárkou), pokud GPT nedá
+    # fallback místo: za poslední čárkou
     fallback_place = extract_place_from_input(user_text)
     if fallback_place:
         log(f"🧭 Fallback místo z textu: {fallback_place}")
@@ -323,28 +341,39 @@ if submitted and user_text.strip():
             st.warning(f"{produkt}: {w}×{h} → {use_w}×{use_h}: buňka je prázdná (NaN).")
             continue
 
-        item_rows = []
-        item_rows.append({
+        # Základní položka produktu
+        base_price = float(price)
+        results.append({
             "Položka": produkt,
             "Rozměr": f"{w}×{h}",
             "Poznámka": "",
-            "Cena bez DPH": float(price)
+            "Cena bez DPH": round(base_price)
         })
 
-        # DOPRAVA (pokud máme místo a API KEY)
+        # 🛠️ Montáže – VŽDY pro každý produkt
+        for p in MONT_PERC:
+            mont_price = round(base_price * p / 100)
+            results.append({
+                "Položka": f"Montáž {p} %",
+                "Rozměr": "",
+                "Poznámka": "",
+                "Cena bez DPH": mont_price
+            })
+            log(f"🛠️ Montáž {p}% = {mont_price} Kč")
+
+        # 🚚 Doprava – pokud máme místo a API klíč
         api_key = st.secrets.get("GOOGLE_API_KEY")
-        if place and api_key:
+        if api_key and place:
             km = get_distance_km(ORIGIN_PLACE, place, api_key)
             if km is not None:
-                # tam i zpět
-                travel_cost = round(km * 2 * Kc_per_km_oneway)
-                item_rows.append({
+                travel_cost = round(km * 2 * KC_PER_KM_ONEWAY)  # tam + zpět
+                results.append({
                     "Položka": "Doprava",
                     "Rozměr": f"{km:.1f} km (tam+zpět)",
                     "Poznámka": f"{ORIGIN_PLACE} → {place}",
                     "Cena bez DPH": travel_cost
                 })
-                log(f"🚚 Doprava: {km:.1f} km → {travel_cost} Kč")
+                log(f"🚚 Doprava {km:.1f} km = {travel_cost} Kč")
             else:
                 log("⚠️ Dopravu nelze spočítat (Distance API)")
         else:
@@ -353,10 +382,8 @@ if submitted and user_text.strip():
             elif not api_key:
                 log("ℹ️ Chybí GOOGLE_API_KEY, doprava se nepočítá.")
 
-        results.extend(item_rows)
-
     if results:
-        st.success(f"Hotovo – {len(results)} položek.")
+        st.success(f"Hotovo – {len(results)} řádků.")
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
         st.info("Nebyla nalezena žádná ocenitelná položka (zkontroluj vstup nebo ceník).")
