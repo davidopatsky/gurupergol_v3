@@ -10,7 +10,7 @@ from io import StringIO
 # ZÁKLAD
 # ===============================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – doprava + montáže")
+st.title("🧠 Cenový asistent – doprava + montáže (robustní osy)")
 
 # Session
 if "LOG" not in st.session_state:
@@ -80,7 +80,6 @@ def fetch_csv(url: str) -> pd.DataFrame | None:
             return None
         df = pd.read_csv(StringIO(r.text))
         log(f"✅ CSV načteno: shape={df.shape}")
-        # ukázka prvních 3 řádků
         try:
             log("👀 Náhled CSV (3 řádky):\n" + df.head(3).to_string(index=False))
         except Exception:
@@ -118,7 +117,7 @@ def coerce_matrix(df: pd.DataFrame) -> pd.DataFrame | None:
     - první sloupec = výšky (index),
     - hlavičky sloupců = šířky,
     - tělo = ceny (float).
-    Pokud první sloupec nevypadá numerický, zkusí transponovat.
+    Pokud první sloupec nevypadá numericky, zkusí transponovat.
     """
     if df is None or df.empty:
         log("⚠️ Prázdný DF, nelze převést na matici.")
@@ -156,21 +155,63 @@ def coerce_matrix(df: pd.DataFrame) -> pd.DataFrame | None:
     log(f"🧩 Matice připravena: shape={df2.shape} (index/kolony int)")
     return df2
 
+def safe_axis_vals(vals_iterable):
+    """Bezpečně převede hodnoty osy na inty; ignoruje NaN/None/špatné tokeny."""
+    out = []
+    for v in list(vals_iterable):
+        try:
+            if pd.isna(v):
+                continue
+            # převeď co nejrobustněji
+            iv = int(round(float(str(v).replace(",", ".").replace("\xa0", "").replace(" ", ""))))
+            out.append(iv)
+        except Exception:
+            # poslední pokus – normalizační funkce
+            nv = normalize_numeric_token(v)
+            if nv is not None:
+                out.append(nv)
+            # jinak ignoruj
+    # unikátní a seřazené
+    out = sorted(set(out))
+    return out
+
 def nearest_ge(values: list[int], want: int) -> int:
     vals = sorted(values)
     for v in vals:
         if v >= want:
             return v
-    return vals[-1]
+    return vals[-1] if vals else want
 
 def find_price(df_mat: pd.DataFrame, width: int, height: int):
+    """
+    Robustní výběr ceny:
+    - osy bezpečně převedu na int (safe_axis_vals)
+    - když je osa prázdná → zaloguju a vrátím (None, None, None)
+    - vyberu nejbližší >= hodnotu; když nic, použiju max (nearest_ge)
+    """
     if df_mat is None or df_mat.empty:
+        log("⚠️ find_price: prázdná matice")
         return None, None, None
-    cols = sorted([int(c) for c in df_mat.columns])
-    rows = sorted([int(r) for r in df_mat.index])
+
+    cols = safe_axis_vals(df_mat.columns)
+    rows = safe_axis_vals(df_mat.index)
+
+    if not cols:
+        log("❌ find_price: sloupce prázdné/nečíselné – nelze vybrat šířku.")
+        return None, None, None
+    if not rows:
+        log("❌ find_price: řádky prázdné/nečíselné – nelze vybrat výšku.")
+        return None, None, None
+
     use_w = nearest_ge(cols, width)
     use_h = nearest_ge(rows, height)
-    price = df_mat.loc[use_h, use_w]
+
+    try:
+        price = df_mat.loc[use_h, use_w]
+    except Exception as e:
+        log(f"❌ find_price: selhal df.loc[{use_h}, {use_w}] – {e}")
+        return use_w, use_h, None
+
     return use_w, use_h, price
 
 # Google Distance Matrix
@@ -208,7 +249,9 @@ def extract_place_from_input(user_text: str) -> str | None:
 # ===============================
 def load_all_ceniky():
     st.session_state.LOG.clear()
-    cwd_and_existence_probe()
+    log(f"📂 CWD: {os.getcwd()}")
+    log(f"🔎 exists('{SEZNAM_PATH}')? {os.path.exists(SEZNAM_PATH)}")
+
     pairs = read_seznam_ceniku()
     st.session_state.CENIKY.clear()
     st.session_state.PRODUKTY.clear()
@@ -226,11 +269,14 @@ def load_all_ceniky():
         st.session_state.PRODUKTY.append(name)
         # shrnutí rozměrů
         try:
-            cols = sorted([int(c) for c in mat.columns])
-            rows = sorted([int(r) for r in mat.index])
-            log(f"📏 {name}: šířky {cols[0]}–{cols[-1]} | výšky {rows[0]}–{rows[-1]} (kroky: {len(cols)}×{len(rows)})")
-        except Exception:
-            pass
+            cols = safe_axis_vals(mat.columns)
+            rows = safe_axis_vals(mat.index)
+            if cols and rows:
+                log(f"📏 {name}: šířky {cols[0]}–{cols[-1]} | výšky {rows[0]}–{rows[-1]} (kroky: {len(cols)}×{len(rows)})")
+            else:
+                log(f"⚠️ {name}: po převodu nejdou vyčíst osy (cols={len(cols)}, rows={len(rows)})")
+        except Exception as e:
+            log(f"⚠️ Shrnutí rozměrů selhalo: {e}")
 
 # UI: reload ceníků
 colA, colB = st.columns([1,1])
@@ -335,8 +381,13 @@ if submitted and user_text.strip():
             continue
 
         use_w, use_h, price = find_price(df_mat, w, h)
+        if use_w is None or use_h is None:
+            st.warning(f"{produkt}: nepodařilo se vybrat rozměr z matice.")
+            continue
+
         log(f"📐 Požadováno {w}×{h}, použito {use_w}×{use_h}")
         log(f"📤 df.loc[{use_h}, {use_w}] = {price}")
+
         if pd.isna(price):
             st.warning(f"{produkt}: {w}×{h} → {use_w}×{use_h}: buňka je prázdná (NaN).")
             continue
