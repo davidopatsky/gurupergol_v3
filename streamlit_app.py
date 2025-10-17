@@ -39,15 +39,31 @@ def log(msg: str):
 # === LOG STARTU PROGRAMU ===
 log("==== Start programu ====")
 
-# === NAČTENÍ SEZNAMU CENÍKŮ ===
-def load_pricelists():
-    log("Začátek načítání seznamu ceníků...")
-    try:
-        with open("seznam_ceniku.txt", "r", encoding="utf-8") as f:
-            lines = [ln.strip() for ln in f.readlines() if ln.strip()]
-        log(f"Soubor seznam_ceniku.txt načten ({len(lines)} řádků)")
-    except Exception as e:
-        log(f"Chyba při čtení seznam_ceniku.txt: {e}")
+# === Načtení seznamu ceníků ===
+log("Načítám seznam ceníků...")
+ceniky = {}
+
+with open("seznam_ceniku.txt", "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            log(f"⚠️ Řádek přeskočen (chybí '='): {line}")
+            continue
+
+        try:
+            name, link = line.split("=", 1)
+            name = name.strip()
+            link = link.strip().strip('"')
+            if not link.startswith("http"):
+                log(f"⚠️ Neplatný odkaz u {name}: {link}")
+                continue
+            ceniky[name] = link
+        except Exception as e:
+            log(f"❌ Chyba při parsování řádku '{line}': {e}")
+
+log(f"✅ Načten seznam_ceniku.txt ({len(ceniky)} řádků)")
         return
 
     loaded = []
