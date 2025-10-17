@@ -5,25 +5,21 @@ import io
 import datetime
 import json
 import re
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
 
-# ==========================
+# =========================================
 # 🧠 Funkce pro logování
-# ==========================
+# =========================================
 def log(msg):
-    """Přidá zprávu do live logu se záznamem času"""
     now = datetime.datetime.now().strftime("[%H:%M:%S]")
     st.session_state.log_messages.append(f"{now} {msg}")
 
 def show_logs():
-    """Zobrazení logu v sidebaru (zasunovací sekce)"""
     with st.sidebar.expander("🧠 Log aplikace (live)", expanded=True):
         st.text("\n".join(st.session_state.log_messages))
 
-# ==========================
+# =========================================
 # ⚙️ Inicializace session
-# ==========================
+# =========================================
 if "log_messages" not in st.session_state:
     st.session_state.log_messages = []
 if "ceniky" not in st.session_state:
@@ -33,9 +29,9 @@ if "nactene_tabulky" not in st.session_state:
 if "vysledky" not in st.session_state:
     st.session_state.vysledky = []
 
-# ==========================
+# =========================================
 # 🏁 Start programu
-# ==========================
+# =========================================
 log("==== Start programu ====")
 st.title("💡 GuruPergol AI asistent")
 st.markdown(
@@ -44,9 +40,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ==========================
+# =========================================
 # 📄 Načtení seznamu ceníků
-# ==========================
+# =========================================
 try:
     log("Načítám seznam ceníků...")
     ceniky = {}
@@ -74,9 +70,9 @@ except Exception as e:
     log(f"❌ Chyba při načítání seznam_ceniku.txt: {e}")
     st.stop()
 
-# ==========================
-# 🌍 Načtení všech ceníků
-# ==========================
+# =========================================
+# 🌍 Načtení všech ceníků z Google Sheets
+# =========================================
 for name, link in st.session_state.ceniky.items():
     try:
         log(f"Načítám ceník: {name} – {link}")
@@ -90,19 +86,19 @@ for name, link in st.session_state.ceniky.items():
     except Exception as e:
         log(f"❌ Chyba při načítání {name}: {e}")
 
-log("Všechny dostupné ceníky načteny.")
+log("==== Všechny dostupné ceníky načteny ====")
 
-# ==========================
-# 🔍 Collapsible přehled ceníků
-# ==========================
+# =========================================
+# 📂 Collapsible přehled všech tabulek
+# =========================================
 with st.expander("📂 Všechny načtené tabulky"):
     for name, df in st.session_state.nactene_tabulky.items():
         st.markdown(f"#### 📘 {name}")
         st.dataframe(df, use_container_width=True)
 
-# ==========================
+# =========================================
 # 🧮 Funkce pro vyhledání ceny
-# ==========================
+# =========================================
 def find_price(df, w, h):
     try:
         available_w = sorted([float(c) for c in df.columns])
@@ -114,25 +110,43 @@ def find_price(df, w, h):
     except Exception:
         return None, None, None
 
-# ==========================
-# 🚗 Výpočet dopravy Blučina – místo
-# ==========================
+# =========================================
+# 🚗 Výpočet vzdálenosti přes Google API
+# =========================================
 def calculate_distance_km(destination):
+    """Spočítá vzdálenost Blučina–destination pomocí Google Distance Matrix API"""
     try:
-        geolocator = Nominatim(user_agent="gurupergol_v3")
-        start = geolocator.geocode("Blučina, Czechia")
-        end = geolocator.geocode(destination)
-        if not start or not end:
+        origin = "Blučina, Czechia"
+        api_key = st.secrets["google_api_key"]  # API klíč ve Streamlit secrets
+        url = (
+            f"https://maps.googleapis.com/maps/api/distancematrix/json"
+            f"?origins={origin}&destinations={destination}"
+            f"&key={api_key}&language=cs"
+        )
+        response = requests.get(url)
+        data = response.json()
+
+        if data["status"] != "OK":
+            log(f"❌ Chyba z Google API: {data.get('status')}")
             return None
-        dist = geodesic((start.latitude, start.longitude), (end.latitude, end.longitude)).km
-        return round(dist, 1)
+
+        element = data["rows"][0]["elements"][0]
+        if element["status"] != "OK":
+            log(f"⚠️ Žádná trasa nenalezena pro {destination}")
+            return None
+
+        distance_meters = element["distance"]["value"]
+        distance_km = round(distance_meters / 1000, 1)
+        log(f"✅ Google API: Blučina → {destination} = {distance_km} km")
+        return distance_km
+
     except Exception as e:
-        log(f"❌ Chyba při výpočtu vzdálenosti: {e}")
+        log(f"❌ Výjimka při volání Google Distance API: {e}")
         return None
 
-# ==========================
+# =========================================
 # 📥 Uživatelský vstup
-# ==========================
+# =========================================
 st.subheader("💬 Zadej požadavek")
 user_input = st.text_input("Např. `ALUX Bioclimatic 5990x4500, Praha`")
 
@@ -171,19 +185,19 @@ if user_input:
                     # Montáže
                     montaze = {f"Montáž {p}%": round(price * (p / 100)) for p in [12, 13, 14, 15]}
 
+                    # Uložení výsledků
                     st.session_state.vysledky.append({
-                        "produkt": selected_name,
-                        "šířka": used_w,
-                        "hloubka": used_h,
-                        "cena_bez_DPH": price,
-                        "doprava": doprava,
+                        "Produkt": selected_name,
+                        "Rozměr": f"{used_w}×{used_h}",
+                        "Cena bez DPH": price,
+                        "Doprava": doprava,
                         **montaze
                     })
                     log(f"📐 Požadováno {w}×{h}, použito {used_w}×{used_h}, cena={price}, doprava={doprava} Kč")
 
-# ==========================
+# =========================================
 # 📊 Výsledky výpočtů (historie)
-# ==========================
+# =========================================
 st.subheader("📦 Výsledky výpočtů (historie)")
 if st.session_state.vysledky:
     df_hist = pd.DataFrame(st.session_state.vysledky)
@@ -191,7 +205,7 @@ if st.session_state.vysledky:
 else:
     st.info("Zatím žádné výsledky.")
 
-# ==========================
+# =========================================
 # 📜 Log v sidebaru
-# ==========================
+# =========================================
 show_logs()
