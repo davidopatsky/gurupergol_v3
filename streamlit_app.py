@@ -1,4 +1,4 @@
-items = json.loads(block)  # už máš z dřívějška
+items = json.loads(gpt_output_clean)
 log("📦 Parsováno: " + json.dumps(items, ensure_ascii=False))
 
 available_display_names = [st.session_state.NAME_MAP[k] for k in st.session_state.NAME_MAP]
