@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import requests
 import pandas as pd
 import streamlit as st
@@ -10,8 +11,8 @@ from datetime import datetime
 # ==========================================
 # KONFIGURACE
 # ==========================================
-st.set_page_config(page_title="Cenový asistent 2.0", layout="wide")
-st.title("🧠 Cenový asistent – verze 2.0 (bez GPT, s cache)")
+st.set_page_config(page_title="Cenový asistent 2.1", layout="wide")
+st.title("🧠 Cenový asistent – verze 2.1 (více logování, realtime feedback)")
 
 SEZNAM_PATH = os.path.join(os.path.dirname(__file__), "seznam_ceniku.txt")
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
@@ -37,11 +38,18 @@ def timestamp():
     return datetime.now().strftime("[%H:%M:%S]")
 
 def log(msg: str):
-    st.session_state.LOG.append(f"{timestamp()} {msg}")
+    entry = f"{timestamp()} {msg}"
+    st.session_state.LOG.append(entry)
+    st.session_state["last_log"] = entry
+
+def show_live_status():
+    """Zobrazí poslední log zprávu jako 'stav' přímo v UI."""
+    if "last_log" in st.session_state:
+        st.info(st.session_state["last_log"])
 
 def show_log_sidebar():
     with st.sidebar:
-        st.markdown("### 🪵 Log výpočtů")
+        st.markdown("### 🪵 Detailní log výpočtů")
         with st.expander("Zobrazit / skrýt", expanded=False):
             st.text_area("Log", "\n".join(st.session_state.LOG), height=600)
 
@@ -71,9 +79,10 @@ def read_seznam_ceniku():
 def fetch_csv_cached(name: str, url: str):
     ensure_cache_dir()
     cache_path = os.path.join(CACHE_DIR, f"{name}.csv")
+    start = time.time()
     if os.path.exists(cache_path):
         df = pd.read_csv(cache_path, index_col=0)
-        log(f"📂 {name}: načteno z cache ({df.shape[1]}×{df.shape[0]})")
+        log(f"📂 {name}: načteno z cache ({df.shape[1]}×{df.shape[0]}) za {time.time()-start:.2f}s")
         return df
     try:
         r = requests.get(url, timeout=20)
@@ -83,25 +92,29 @@ def fetch_csv_cached(name: str, url: str):
         df = pd.read_csv(StringIO(r.text))
         df.to_csv(cache_path, index=False)
         df = df.set_index(df.columns[0])
-        log(f"✅ {name}: staženo a uloženo ({df.shape[1]}×{df.shape[0]})")
+        log(f"✅ {name}: staženo ({df.shape[1]}×{df.shape[0]}) za {time.time()-start:.2f}s")
         return df
     except Exception as e:
         log(f"❌ {name}: chyba stahování {e}")
         return None
 
 def load_ceniky(force=False):
+    st.session_state["last_log"] = "🔄 Načítám ceníky..."
+    show_live_status()
+    start_total = time.time()
     if st.session_state.CENIKY_NACTENE and not force:
         log("📦 Ceníky už načtené – přeskakuji.")
         return
     st.session_state.CENIKY.clear()
     st.session_state.PRODUKTY.clear()
     for name, url in read_seznam_ceniku():
+        log(f"🔄 Načítám {name}...")
         df = fetch_csv_cached(name, url)
         if df is not None:
             st.session_state.CENIKY[name.lower()] = df
             st.session_state.PRODUKTY.append(name)
     st.session_state.CENIKY_NACTENE = True
-    log("🎯 Načítání ceníků dokončeno.")
+    log(f"🎯 Načítání ceníků dokončeno za {time.time()-start_total:.2f}s.")
 
 # ==========================================
 # VÝPOČTY
@@ -121,7 +134,7 @@ def find_price(df, w, h):
         use_w = nearest_ge(cols, w)
         use_h = nearest_ge(rows, h)
         price = df.loc[use_h, use_w]
-        log(f"🔢 Cena {use_w}×{use_h} = {price}")
+        log(f"🔢 {use_w}×{use_h} → {price}")
         return use_w, use_h, price
     except Exception as e:
         log(f"❌ find_price: {e}")
@@ -142,6 +155,7 @@ def calculate_transport_cost(destination: str):
         km = cache[destination]
         log(f"🚗 Doprava (cache): {destination} = {km:.1f} km")
     else:
+        log(f"🛰️ Zjišťuji vzdálenost do '{destination}'...")
         try:
             import googlemaps
             gmaps = googlemaps.Client(key=st.secrets["GOOGLE_API_KEY"])
@@ -151,7 +165,7 @@ def calculate_transport_cost(destination: str):
             cache[destination] = km
             with open(DIST_CACHE_PATH, "w", encoding="utf-8") as f:
                 json.dump(cache, f, ensure_ascii=False, indent=2)
-            log(f"🚗 Doprava API: {destination} = {km:.1f} km")
+            log(f"✅ Doprava API: {destination} = {km:.1f} km")
         except Exception as e:
             log(f"❌ Chyba výpočtu dopravy: {e}")
             km = 0
@@ -160,22 +174,21 @@ def calculate_transport_cost(destination: str):
     return km, price
 
 # ==========================================
-# REGEX PARSER (náhrada GPT)
+# REGEX PARSER
 # ==========================================
 def parse_user_text(user_text: str, products: list[str]):
     """Z textu vytáhne produkt, rozměry a adresu pomocí regex."""
+    log("🔍 Analyzuji vstupní text...")
     results = []
     text = user_text.lower().replace("×", "x")
-
-    # adresa = poslední slovo s velkým písmenem nebo město
     addr_match = re.findall(r"[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][a-záčďéěíňóřšťúůýž]+(?: [A-Z].*)?$", user_text)
     adresa = addr_match[-1] if addr_match else ""
-
     for prod in products:
         if prod.lower() in text:
             m = re.search(r"(\d+)\s*[xX]\s*(\d+)", text)
             if m:
                 w, h = int(m.group(1)), int(m.group(2))
+                log(f"🧩 Rozpoznán produkt: {prod} {w}×{h}")
                 results.append({"produkt": prod, "šířka": w, "hloubka_výška": h})
     return {"polozky": results, "adresa": adresa}
 
@@ -195,25 +208,25 @@ with st.expander("📂 Zobrazit všechny načtené ceníky", expanded=False):
             st.markdown(f"### {name}")
             st.dataframe(df, use_container_width=True)
 
-# ---- Formulář ----
 st.markdown("---")
 st.subheader("📝 Zadej text poptávky")
 user_text = st.text_area("Např.: ALUX Thermo 6000x4500, Praha", height=100)
 
 if st.button("📤 Spočítat"):
     st.session_state.LOG.clear()
-    log(f"📥 Vstup:\n{user_text}")
+    log(f"📥 Vstup: {user_text}")
+    show_live_status()
 
     parsed = parse_user_text(user_text, st.session_state.PRODUKTY)
     items = parsed.get("polozky", [])
     destination = parsed.get("adresa", "")
 
-    rows = []
-    total = 0
+    rows, total = [], 0
+    st.info("⏳ Počítám ceny, prosím čekejte...")
+    time.sleep(0.5)
 
     for it in items:
-        produkt = it["produkt"]
-        w, h = it["šířka"], it["hloubka_výška"]
+        produkt, w, h = it["produkt"], it["šířka"], it["hloubka_výška"]
         df = st.session_state.CENIKY.get(produkt.lower())
         if df is None:
             log(f"❌ Nenalezen ceník: {produkt}")
@@ -229,6 +242,7 @@ if st.button("📤 Spočítat"):
         rows.append([f"Montáž {pct} %", "", "", int(total * pct / 100)])
 
     if destination:
+        st.info(f"🚗 Počítám dopravu do {destination}...")
         km, cost = calculate_transport_cost(destination)
         rows.append([f"Doprava ({km:.1f} km × 2 × {TRANSPORT_RATE} Kč)", "", "", cost])
     else:
@@ -236,6 +250,8 @@ if st.button("📤 Spočítat"):
 
     rows.append(["Celkem bez DPH", "", "", int(total + cost)])
     df_out = pd.DataFrame(rows, columns=["Položka", "Rozměr požad.", "Rozměr použit.", "Cena (bez DPH)"])
+
+    st.success("✅ Výpočet dokončen.")
     st.dataframe(df_out, use_container_width=True)
 
 show_log_sidebar()
