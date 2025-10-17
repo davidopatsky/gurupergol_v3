@@ -2,3 +2,4 @@ ALUX Bioclimatic – https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_CHUuFGLI
 screen - https://docs.google.com/spreadsheets/d/e/2PACX-1vTRe-cDxp9cslPmA5EhtQ_KBgEOWfOGF7wj5G2yEVo1pQ6kWnqu8V41C3gRSnrlrA/pub?output=csv
 ALUX Thermo - https://docs.google.com/spreadsheets/d/e/2PACX-1vR9khLV8DugttSfvjuof5jTNnGMXae_F75RmQxZNTO3C7Pby462qcfL-NsatB28cg/pub?output=csv
 ALUX Glass - https://docs.google.com/spreadsheets/d/e/2PACX-1vT84WzHwGWBYUl8SuahaQ2IaxJAvgQVywsVagNCWKNUjfzI_y56zPXvATUkRfRihg/pub?output=csv
+Strada Carbo - https://docs.google.com/spreadsheets/d/e/2PACX-1vS2RYsAlmSa-gEldZV7nlrYON2y2IJW5_GvfzncFRdTcraQMTSPNTBQVhovZUpYqw/pub?output=csv
