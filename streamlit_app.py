@@ -11,8 +11,8 @@ from datetime import datetime
 # ==========================================
 # KONFIGURACE
 # ==========================================
-st.set_page_config(page_title="Cenový asistent 2.2", layout="wide")
-st.title("🧠 Cenový asistent – verze 2.2 (realtime log + progress bar)")
+st.set_page_config(page_title="Cenový asistent 2.3", layout="wide")
+st.title("🧠 Cenový asistent – verze 2.3 (detailní logování)")
 
 SEZNAM_PATH = os.path.join(os.path.dirname(__file__), "seznam_ceniku.txt")
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
@@ -38,9 +38,7 @@ def timestamp():
     return datetime.now().strftime("[%H:%M:%S]")
 
 def log(msg: str):
-    entry = f"{timestamp()} {msg}"
-    st.session_state.LOG.append(entry)
-    st.session_state["last_log"] = entry
+    st.session_state.LOG.append(f"{timestamp()} {msg}")
 
 def show_log_sidebar():
     with st.sidebar:
@@ -108,14 +106,14 @@ def load_ceniky(force=False):
         if df is not None:
             st.session_state.CENIKY[name.lower()] = df
             st.session_state.PRODUKTY.append(name)
-        progress.progress((i + 1) / len(pairs), text=f"📘 Načteno: {name}")
-        time.sleep(0.2)
+        progress.progress((i + 1) / len(pairs), text=f"📘 {name}")
+        time.sleep(0.15)
     st.session_state.CENIKY_NACTENE = True
-    progress.progress(1.0, text=f"✅ Načítání dokončeno ({len(pairs)} ceníků, {time.time()-start_total:.1f}s)")
+    progress.progress(1.0, text=f"✅ Dokončeno ({time.time()-start_total:.1f}s)")
     log("🎯 Načítání ceníků dokončeno.")
 
 # ==========================================
-# VÝPOČTY
+# DETAILNÍ FIND_PRICE
 # ==========================================
 def nearest_ge(values, want):
     vals = sorted([int(float(v)) for v in values if pd.notna(v)])
@@ -125,18 +123,43 @@ def nearest_ge(values, want):
     return vals[-1]
 
 def find_price(df, w, h):
+    """Detailní logování kroků při hledání ceny."""
+    log(f"🔍 [find_price] Zahajuji hledání ceny pro {w}×{h}")
     try:
         cols = sorted([int(float(c)) for c in df.columns if pd.notna(c)])
         rows = sorted([int(float(r)) for r in df.index if pd.notna(r)])
+        log(f"📏 Dostupné šířky: {cols[:5]} ... {cols[-5:]}")
+        log(f"📐 Dostupné výšky: {rows[:5]} ... {rows[-5:]}")
+
         use_w = nearest_ge(cols, w)
         use_h = nearest_ge(rows, h)
+        log(f"➡️ Použita nejbližší vyšší šířka {use_w} a výška {use_h}")
+
+        # výřez okolí hodnoty
+        idx_pos = rows.index(use_h)
+        col_pos = cols.index(use_w)
+        local_rows = rows[max(0, idx_pos-2): idx_pos+3]
+        local_cols = cols[max(0, col_pos-2): col_pos+3]
+        log(f"🔬 Okolní výšky: {local_rows}")
+        log(f"🔬 Okolní šířky: {local_cols}")
+
         price = df.loc[use_h, use_w]
-        log(f"🔢 {use_w}×{use_h} → {price}")
+        log(f"💰 Cena nalezena df[{use_h}, {use_w}] = {price}")
+
+        if pd.isna(price):
+            log("⚠️ Cena je NaN (prázdná buňka v tabulce).")
+            return use_w, use_h, None
+
+        log(f"✅ Cena potvrzena: {price} Kč")
         return use_w, use_h, price
+
     except Exception as e:
-        log(f"❌ find_price: {e}")
+        log(f"❌ [find_price] Chyba: {e}")
         return None, None, None
 
+# ==========================================
+# DOPRAVA
+# ==========================================
 def calculate_transport_cost(destination: str):
     ensure_cache_dir()
     cache = {}
@@ -150,7 +173,7 @@ def calculate_transport_cost(destination: str):
         km = cache[destination]
         log(f"🚗 Doprava (cache): {destination} = {km:.1f} km")
     else:
-        log(f"🛰️ Zjišťuji vzdálenost do '{destination}'...")
+        log(f"🛰️ [Doprava] Zjišťuji vzdálenost do '{destination}' přes Google API…")
         try:
             import googlemaps
             gmaps = googlemaps.Client(key=st.secrets["GOOGLE_API_KEY"])
@@ -160,18 +183,19 @@ def calculate_transport_cost(destination: str):
             cache[destination] = km
             with open(DIST_CACHE_PATH, "w", encoding="utf-8") as f:
                 json.dump(cache, f, ensure_ascii=False, indent=2)
-            log(f"✅ Doprava API: {destination} = {km:.1f} km")
+            log(f"✅ [Doprava] API výsledek: {km:.1f} km")
         except Exception as e:
-            log(f"❌ Chyba výpočtu dopravy: {e}")
+            log(f"❌ [Doprava] Chyba: {e}")
             km = 0
     price = int(km * 2 * TRANSPORT_RATE)
+    log(f"💸 Cena dopravy: {km:.1f} km × 2 × {TRANSPORT_RATE} = {price} Kč")
     return km, price
 
 # ==========================================
 # REGEX PARSER
 # ==========================================
 def parse_user_text(user_text: str, products: list[str]):
-    log("🔍 Analyzuji vstupní text...")
+    log("🔍 Analyzuji vstupní text uživatele...")
     results = []
     text = user_text.lower().replace("×", "x")
     addr_match = re.findall(r"[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][a-záčďéěíňóřšťúůýž]+(?: [A-Z].*)?$", user_text)
@@ -183,6 +207,8 @@ def parse_user_text(user_text: str, products: list[str]):
                 w, h = int(m.group(1)), int(m.group(2))
                 log(f"🧩 Rozpoznán produkt: {prod} {w}×{h}")
                 results.append({"produkt": prod, "šířka": w, "hloubka_výška": h})
+    if adresa:
+        log(f"📍 Rozpoznaná adresa: {adresa}")
     return {"polozky": results, "adresa": adresa}
 
 # ==========================================
@@ -207,7 +233,7 @@ user_text = st.text_area("Např.: ALUX Thermo 6000x4500, Praha", height=100)
 
 if st.button("📤 Spočítat"):
     st.session_state.LOG.clear()
-    log(f"📥 Vstup: {user_text}")
+    log(f"📥 Uživatelský vstup: {user_text}")
 
     parsed = parse_user_text(user_text, st.session_state.PRODUKTY)
     items = parsed.get("polozky", [])
@@ -220,7 +246,7 @@ if st.button("📤 Spočítat"):
     for i, it in enumerate(items, start=1):
         produkt, w, h = it["produkt"], it["šířka"], it["hloubka_výška"]
         df = st.session_state.CENIKY.get(produkt.lower())
-        progress.progress(i / (n + 3), text=f"⚙️ Počítám {produkt} ({i}/{n})")
+        log(f"🔄 [Hledání ceny] Produkt={produkt}, požadováno {w}×{h}")
         if df is None:
             log(f"❌ Nenalezen ceník: {produkt}")
             continue
@@ -230,15 +256,13 @@ if st.button("📤 Spočítat"):
             continue
         total += float(price)
         rows.append([produkt, f"{w}×{h}", f"{use_w}×{use_h}", int(price)])
+        progress.progress(i / (n + 5), text=f"🔢 {produkt} {w}×{h}")
         time.sleep(0.2)
 
-    # Montáže
-    for j, pct in enumerate([12, 13, 14, 15], start=1):
-        progress.progress((i + j) / (n + 6), text=f"🔧 Přidávám montáž {pct}%")
+    for pct in [12, 13, 14, 15]:
         rows.append([f"Montáž {pct} %", "", "", int(total * pct / 100)])
-        time.sleep(0.15)
+        log(f"🔧 Přidána montáž {pct}% = {int(total * pct / 100)} Kč")
 
-    # Doprava
     if destination:
         progress.progress(0.9, text=f"🚗 Počítám dopravu do {destination}...")
         km, cost = calculate_transport_cost(destination)
