@@ -49,23 +49,33 @@ def load_pricelists():
         log(f"🌐 Načítám {name} – {link}")
         try:
             df = pd.read_csv(link)
+
+            # očista dat
+            df = df.dropna(axis=0, how="all").dropna(axis=1, how="all")
             if "Unnamed: 0" in df.columns:
                 df = df.rename(columns={"Unnamed: 0": "index"}).set_index("index")
-            df.index = df.index.astype(float).astype(int)
-            df.columns = df.columns.astype(float).astype(int)
+
+            # filtruj jen čísla v indexech a sloupcích
+            df = df.loc[df.index.dropna()]
+            df.index = pd.to_numeric(df.index, errors="coerce").dropna().astype(int)
+            df.columns = pd.to_numeric(df.columns, errors="coerce")
+            df = df.loc[:, ~df.columns.isna()]
+            df.columns = df.columns.astype(int)
+
             key = re.sub(r"\s+", "", name.lower())
             st.session_state.CENIKY[key] = df
             st.session_state.NAME_MAP[key] = name
             log(f"✅ Ceník načten: {name} ({df.shape})")
-            loaded.append((name, df.shape))
+            loaded.append((name, df))
         except Exception as e:
             log(f"❌ Chyba při načítání {name}: {e}")
 
-    # 🟢 Výpis načtených ceníků pod záhlavím
+    # 📘 Výpis všech ceníků v collapsible formě
     if loaded:
         st.subheader("📘 Načtené ceníky")
-        for name, shape in loaded:
-            st.markdown(f"✅ **{name}** *(řádků: {shape[0]}, sloupců: {shape[1]})*")
+        for name, df in loaded:
+            with st.expander(f"🔹 {name} ({df.shape[0]} řádků × {df.shape[1]} sloupců)", expanded=False):
+                st.dataframe(df, use_container_width=True)
     else:
         st.warning("❗ Žádné ceníky nebyly načteny. Zkontrolujte seznam_ceniku.txt.")
 
@@ -100,7 +110,6 @@ def get_distance_km(origin, destination, api_key):
 if submit and user_input:
     log(f"\n---\n📥 Uživatelský vstup: {user_input}")
 
-    # 🧠 GPT PROMPT
     available_names = [st.session_state.NAME_MAP[k] for k in st.session_state.NAME_MAP]
     gpt_prompt = f"""
 Z následujícího textu vytáhni produkty, šířky a výšky.
