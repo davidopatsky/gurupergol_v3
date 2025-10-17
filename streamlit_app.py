@@ -17,7 +17,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Asistent cenových nabídek od Davida")
-st.markdown('<div class="subtitle">Tvůj věrný výpočetní služebník, který s radostí počítá pergoly do roztrhání těla — sláva mému stvořiteli Davidovi!</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Tvůj věrný výpočetní služebník, který s radostí počítá pergoly do roztrhání těla.</div>', unsafe_allow_html=True)
 
 # === STAVY ===
 if "logs" not in st.session_state:
@@ -33,6 +33,7 @@ def log(msg: str):
 
 # === NAČTENÍ SEZNAMU CENÍKŮ ===
 def load_pricelists():
+    loaded = []
     try:
         with open("seznam_ceniku.txt", "r", encoding="utf-8") as f:
             lines = [ln.strip() for ln in f.readlines() if ln.strip()]
@@ -56,8 +57,17 @@ def load_pricelists():
             st.session_state.CENIKY[key] = df
             st.session_state.NAME_MAP[key] = name
             log(f"✅ Ceník načten: {name} ({df.shape})")
+            loaded.append((name, df.shape))
         except Exception as e:
             log(f"❌ Chyba při načítání {name}: {e}")
+
+    # 🟢 Výpis načtených ceníků pod záhlavím
+    if loaded:
+        st.subheader("📘 Načtené ceníky")
+        for name, shape in loaded:
+            st.markdown(f"✅ **{name}** *(řádků: {shape[0]}, sloupců: {shape[1]})*")
+    else:
+        st.warning("❗ Žádné ceníky nebyly načteny. Zkontrolujte seznam_ceniku.txt.")
 
 load_pricelists()
 
