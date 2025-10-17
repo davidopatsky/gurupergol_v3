@@ -4,16 +4,17 @@ import openai
 import json
 import requests
 import re
+from datetime import datetime
 
 # === ZÁKLADNÍ NASTAVENÍ ===
 st.set_page_config(layout="wide", page_title="Asistent cenových nabídek od Davida")
 
 st.markdown("""
-    <style>
-    .main { max-width: 85%; margin: auto; }
-    h1 { font-size: 32px !important; margin-top: 0 !important; }
-    .subtitle { font-size: 12px; color: #777; margin-bottom: 30px; font-style: italic; }
-    </style>
+<style>
+.main { max-width: 85%; margin: auto; }
+h1 { font-size: 32px !important; margin-top: 0 !important; }
+.subtitle { font-size: 12px; color: #777; margin-bottom: 30px; font-style: italic; }
+</style>
 """, unsafe_allow_html=True)
 
 st.title("Asistent cenových nabídek od Davida")
@@ -26,36 +27,41 @@ if "CENIKY" not in st.session_state:
     st.session_state.CENIKY = {}
 if "NAME_MAP" not in st.session_state:
     st.session_state.NAME_MAP = {}
+if "results" not in st.session_state:
+    st.session_state.results = []
 
 def log(msg: str):
-    """Zápis do live logu."""
-    st.session_state.logs.append(msg)
+    """Zápis do live logu s časem."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    line = f"[{timestamp}] {msg}"
+    st.session_state.logs.append(line)
+
+# === LOG STARTU PROGRAMU ===
+log("==== Start programu ====")
 
 # === NAČTENÍ SEZNAMU CENÍKŮ ===
 def load_pricelists():
-    loaded = []
+    log("Začátek načítání seznamu ceníků...")
     try:
         with open("seznam_ceniku.txt", "r", encoding="utf-8") as f:
             lines = [ln.strip() for ln in f.readlines() if ln.strip()]
+        log(f"Soubor seznam_ceniku.txt načten ({len(lines)} řádků)")
     except Exception as e:
-        st.error(f"❌ Nelze načíst seznam_ceniku.txt: {e}")
+        log(f"Chyba při čtení seznam_ceniku.txt: {e}")
         return
 
-    log(f"📄 Načten seznam_ceniku.txt ({len(lines)} řádků)")
+    loaded = []
     for line in lines:
         if "-" not in line:
             continue
         name, link = [x.strip() for x in line.split("-", 1)]
-        log(f"🌐 Načítám {name} – {link}")
+        log(f"Načítám ceník: {name} z {link}")
         try:
             df = pd.read_csv(link)
-
-            # očista dat
             df = df.dropna(axis=0, how="all").dropna(axis=1, how="all")
             if "Unnamed: 0" in df.columns:
                 df = df.rename(columns={"Unnamed: 0": "index"}).set_index("index")
 
-            # filtruj jen čísla v indexech a sloupcích
             df = df.loc[df.index.dropna()]
             df.index = pd.to_numeric(df.index, errors="coerce").dropna().astype(int)
             df.columns = pd.to_numeric(df.columns, errors="coerce")
@@ -65,19 +71,21 @@ def load_pricelists():
             key = re.sub(r"\s+", "", name.lower())
             st.session_state.CENIKY[key] = df
             st.session_state.NAME_MAP[key] = name
-            log(f"✅ Ceník načten: {name} ({df.shape})")
             loaded.append((name, df))
+            log(f"Ceník {name} načten: {df.shape[0]} řádků, {df.shape[1]} sloupců")
         except Exception as e:
-            log(f"❌ Chyba při načítání {name}: {e}")
+            log(f"Chyba při načítání {name}: {e}")
 
-    # 📘 Výpis všech ceníků v collapsible formě
+    # === VÝPIS DO APLIKACE ===
     if loaded:
-        st.subheader("📘 Načtené ceníky")
-        for name, df in loaded:
-            with st.expander(f"🔹 {name} ({df.shape[0]} řádků × {df.shape[1]} sloupců)", expanded=False):
+        with st.expander("📘 Načtené ceníky (rozklikni pro zobrazení všech)", expanded=False):
+            for name, df in loaded:
+                st.markdown(f"#### {name} ({df.shape[0]} × {df.shape[1]})")
                 st.dataframe(df, use_container_width=True)
+        log("Všechny ceníky načteny a zobrazeny v expanderu.")
     else:
-        st.warning("❗ Žádné ceníky nebyly načteny. Zkontrolujte seznam_ceniku.txt.")
+        st.warning("Nebyl načten žádný ceník.")
+        log("Nebyl načten žádný ceník.")
 
 load_pricelists()
 
@@ -86,29 +94,35 @@ st.subheader("Zadejte popis poptávky")
 user_input = st.text_area("Např.: ALUX Bioclimatic 5990x4500 Praha", height=90)
 submit = st.button("📤 ODESLAT")
 
-# === FUNKCE VÝPOČTU ===
+# === FUNKCE ===
 def find_price(df: pd.DataFrame, w: int, h: int):
+    log(f"Hledám cenu v tabulce pro {w} × {h}")
     cols = sorted([int(c) for c in df.columns])
     rows = sorted([int(r) for r in df.index])
     use_w = next((c for c in cols if c >= w), cols[-1])
     use_h = next((r for r in rows if r >= h), rows[-1])
     val = df.loc[use_h, use_w]
+    log(f"Vybraná buňka df.loc[{use_h}, {use_w}] = {val}")
     return use_w, use_h, val
 
 def get_distance_km(origin, destination, api_key):
+    log(f"Volám Distance Matrix API: {origin} → {destination}")
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {"origins": origin, "destinations": destination, "key": api_key, "units": "metric"}
     r = requests.get(url, params=params)
     data = r.json()
     try:
         km = data["rows"][0]["elements"][0]["distance"]["value"] / 1000
+        log(f"Vzdálenost: {km} km")
         return km
-    except Exception:
+    except Exception as e:
+        log(f"Chyba při výpočtu vzdálenosti: {e}")
         return None
 
-# === HLAVNÍ LOGIKA ===
+# === HLAVNÍ VÝPOČET ===
 if submit and user_input:
-    log(f"\n---\n📥 Uživatelský vstup: {user_input}")
+    log("=== NOVÝ POŽADAVEK ===")
+    log(f"Uživatelský vstup: {user_input}")
 
     available_names = [st.session_state.NAME_MAP[k] for k in st.session_state.NAME_MAP]
     gpt_prompt = f"""
@@ -123,8 +137,7 @@ Vracíš POUZE JSON pole ve formátu:
 [{{"produkt": "...", "šířka": ..., "hloubka_výška": ..., "misto": "..."}}]
     """.strip()
 
-    log(f"📨 GPT PROMPT:\n{gpt_prompt}")
-
+    log("Volám GPT pro analýzu vstupu...")
     try:
         client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
         gpt_response = client.chat.completions.create(
@@ -136,34 +149,30 @@ Vracíš POUZE JSON pole ve formátu:
             max_tokens=800
         )
         gpt_output_raw = gpt_response.choices[0].message.content.strip()
-        log(f"📬 GPT odpověď (RAW):\n{gpt_output_raw}")
+        log(f"GPT odpověď RAW: {gpt_output_raw}")
 
         start = gpt_output_raw.find('[')
         end = gpt_output_raw.rfind(']') + 1
         gpt_output_clean = gpt_output_raw[start:end]
         items = json.loads(gpt_output_clean)
-        log(f"📦 Parsováno:\n{json.dumps(items, ensure_ascii=False, indent=2)}")
+        log(f"Parsováno JSON: {items}")
 
     except Exception as e:
-        st.error(f"❌ GPT chyba: {e}")
-        log(f"❌ GPT chyba: {e}")
+        log(f"Chyba GPT: {e}")
         items = []
 
-    # === ZPRACOVÁNÍ PRODUKTŮ ===
+    # === ZPRACOVÁNÍ ===
     results = []
-
     for p in items:
         if p.get("nenalezeno"):
-            st.warning(p.get("zprava"))
-            log("⚠️ " + p.get("zprava"))
+            log("Produkt nebyl rozpoznán, GPT žádá upřesnění.")
             continue
 
         product = p["produkt"]
         key = re.sub(r"\s+", "", product.lower())
 
         if key not in st.session_state.CENIKY:
-            st.error(f"❌ Ceník nenalezen: {product}")
-            log(f"❌ Ceník nenalezen: {product}")
+            log(f"Ceník {product} nenalezen v seznamu.")
             continue
 
         df = st.session_state.CENIKY[key]
@@ -171,46 +180,44 @@ Vracíš POUZE JSON pole ve formátu:
         h = int(float(p["hloubka_výška"]))
         use_w, use_h, price = find_price(df, w, h)
 
-        log(f"📐 Požadováno {w}×{h}, použito {use_w}×{use_h}, cena={price}")
-
         if pd.isna(price):
-            st.warning(f"❌ Nenalezena cena pro {w}×{h}")
-            log(f"❌ Nenalezena cena v {product}")
+            log(f"Chybí cena pro {w}×{h} v {product}")
             continue
 
         base_price = float(price)
+        log(f"Základní cena: {base_price} Kč")
+
         rows = [{"Položka": product, "Rozměr": f"{w}×{h}", "Cena bez DPH": round(base_price)}]
 
-        # Montáže 12–15 %
         for perc in [12, 13, 14, 15]:
-            rows.append({
-                "Položka": f"Montáž {perc} %",
-                "Rozměr": "",
-                "Cena bez DPH": round(base_price * perc / 100)
-            })
+            rows.append({"Položka": f"Montáž {perc} %", "Rozměr": "", "Cena bez DPH": round(base_price * perc / 100)})
 
-        # Doprava
         place = p.get("misto", "").strip()
-        if place and place.lower() not in ["neuvedeno", "nedodano", "nedodáno"]:
+        if place and place.lower() not in ["neuvedeno", "nedodano"]:
             api_key = st.secrets.get("GOOGLE_API_KEY", "")
             if api_key:
                 km = get_distance_km("Blučina, Czechia", place, api_key)
                 if km:
                     travel_cost = round(km * 2 * 15)
                     rows.append({"Položka": "Doprava", "Rozměr": f"{km:.1f} km", "Cena bez DPH": travel_cost})
-                    log(f"🚚 Doprava {km:.1f} km = {travel_cost} Kč")
+                    log(f"Doprava {km:.1f} km → {travel_cost} Kč")
 
         results.extend(rows)
 
-    # === VÝSTUP ===
     if results:
-        st.success(f"✅ Hotovo ({len(results)} položek)")
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-        log(f"📊 Výpočet hotov – {len(results)} řádků.")
+        df_out = pd.DataFrame(results)
+        st.session_state.results.append(df_out)
+        st.success("Výpočet dokončen, výsledek uložen do historie.")
     else:
-        st.warning("⚠️ Nebyl nalezen žádný výsledek.")
-        log("⚠️ Výpočet selhal – žádné výsledky.")
+        st.warning("Bez výsledků, pravděpodobně chybí shoda nebo cena.")
 
-# === LIVE LOG ===
-with st.expander("🧠 Live log", expanded=True):
+# === HISTORIE VÝSLEDKŮ ===
+if st.session_state.results:
+    st.subheader("📊 Historie výpočtů")
+    for i, df in enumerate(st.session_state.results):
+        st.markdown(f"**Výpočet {i+1}**")
+        st.dataframe(df, use_container_width=True)
+
+# === SIDEBAR LOG ===
+with st.sidebar.expander("🧠 Log aplikace (live)", expanded=True):
     st.text("\n".join(st.session_state.logs))
