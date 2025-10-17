@@ -10,7 +10,7 @@ from io import StringIO
 # 1️⃣ KONFIGURACE
 # ==========================================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – stabilní verze")
+st.title("🧠 Cenový asistent – stabilní verze (čisté číselné ceny)")
 
 SEZNAM_PATH = os.path.join(os.path.dirname(__file__), "seznam_ceniku.txt")
 ORIGIN = "Blučina, Česká republika"
@@ -135,15 +135,12 @@ def find_price(df, w, h):
     if df is None or df.empty:
         log("⚠️ find_price: prázdný DF.")
         return None, None, None
-
     try:
         cols = [int(c) for c in df.columns if pd.notna(c) and str(c).isdigit()]
         rows = [int(r) for r in df.index if pd.notna(r) and str(r).isdigit()]
-
         if not cols or not rows:
-            log(f"⚠️ find_price: DF nemá validní rozměry.")
+            log("⚠️ find_price: DF nemá validní rozměry.")
             return None, None, None
-
         use_w = nearest_ge(cols, w)
         use_h = nearest_ge(rows, h)
         price = df.loc[use_h, use_w]
@@ -160,12 +157,12 @@ def calculate_transport_cost(destination: str):
         res = gmaps.distance_matrix([ORIGIN], [destination], mode="driving")
         dist_m = res["rows"][0]["elements"][0]["distance"]["value"]
         km = dist_m / 1000
-        price = km * 2 * TRANSPORT_RATE
-        log(f"🚗 Doprava {ORIGIN} → {destination}: {km:.1f} km → {price:.0f} Kč")
+        price = int(km * 2 * TRANSPORT_RATE)
+        log(f"🚗 Doprava {ORIGIN} → {destination}: {km:.1f} km → {price} Kč")
         return km, price
     except Exception as e:
         log(f"❌ Chyba výpočtu dopravy: {e}")
-        return 0.0, 0.0
+        return 0.0, 0
 
 # ==========================================
 # 5️⃣ GPT – EXTRAKCE INFORMACÍ
@@ -244,21 +241,21 @@ if st.button("📤 Spočítat"):
             log(f"⚠️ {produkt}: cena nenalezena ({w}×{h})")
             continue
         total += float(price)
-        rows.append([produkt, f"{w}×{h}", f"{use_w}×{use_h}", f"{price:,.0f} Kč"])
+        rows.append([produkt, f"{w}×{h}", f"{use_w}×{use_h}", int(price)])
 
     # Montáže
     for pct in [12, 13, 14, 15]:
-        rows.append([f"Montáž {pct} %", "", "", f"{total*pct/100:,.0f} Kč"])
+        rows.append([f"Montáž {pct} %", "", "", int(total * pct / 100)])
 
     # Doprava
     if destination:
         km, cost = calculate_transport_cost(destination)
-        rows.append([f"Doprava ({km:.1f} km × 2 × {TRANSPORT_RATE} Kč)", "", "", f"{cost:,.0f} Kč"])
+        rows.append([f"Doprava ({km:.1f} km × 2 × {TRANSPORT_RATE} Kč)", "", "", cost])
     else:
         cost = 0
 
     # Součet
-    rows.append(["Celkem bez DPH", "", "", f"{total + cost:,.0f} Kč"])
+    rows.append(["Celkem bez DPH", "", "", int(total + cost)])
 
     df_out = pd.DataFrame(rows, columns=["Položka", "Rozměr požad.", "Rozměr použit.", "Cena (bez DPH)"])
     st.dataframe(df_out, use_container_width=True)
