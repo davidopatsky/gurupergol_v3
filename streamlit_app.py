@@ -11,7 +11,7 @@ from io import StringIO
 # ZÁKLAD
 # ===============================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – automatické výpočty")
+st.title("🧠 Cenový asistent – automatický výpočet")
 
 if "LOG" not in st.session_state:
     st.session_state.LOG = []
@@ -43,28 +43,26 @@ def read_seznam_ceniku():
                 continue
             m = re.match(r'^(.+?)\s*=\s*["\'](.+?)["\']$', raw)
             if not m:
-                log(f"⚠️ Řádek {i} přeskočen (neočekávaný formát): {raw}")
+                log(f"⚠️ Řádek {i} přeskočen: {raw}")
                 continue
             name, url = m.groups()
             pairs.append((name.strip(), url.strip()))
         log(f"✅ Zparsováno {len(pairs)} položek ze seznamu")
     except Exception as e:
-        log(f"❌ Chyba při čtení '{SEZNAM_PATH}': {e}")
+        log(f"❌ Chyba při čtení seznamu: {e}")
         st.error(f"Soubor '{SEZNAM_PATH}' chybí nebo nejde číst.")
     return pairs
 
 # ===============================
-# FUNKCE PRO ZPRACOVÁNÍ CENÍKŮ
+# FUNKCE PRO CENÍKY
 # ===============================
 def fetch_csv(url: str) -> pd.DataFrame | None:
     try:
-        log(f"🌐 GET {url}")
         r = requests.get(url, timeout=30)
         if r.status_code != 200:
             log(f"❌ HTTP {r.status_code}")
             return None
         df = pd.read_csv(StringIO(r.text))
-        log(f"✅ CSV načteno: shape={df.shape}")
         return df
     except Exception as e:
         log(f"❌ Chyba při stahování CSV: {e}")
@@ -77,8 +75,7 @@ def normalize_numeric_token(x) -> int | None:
     s = s.replace(".", "").replace(",", ".")
     m = re.search(r"-?\d+(\.\d+)?", s)
     if not m: return None
-    try:
-        return int(round(float(m.group(0))))
+    try: return int(round(float(m.group(0))))
     except: return None
 
 def coerce_matrix(df: pd.DataFrame) -> pd.DataFrame | None:
@@ -121,22 +118,21 @@ def find_price(df_mat: pd.DataFrame, width: int, height: int):
     return use_w, use_h, price
 
 # ===============================
-# DOPRAVA
+# DOPRAVA – GOOGLE DISTANCE MATRIX
 # ===============================
 def calculate_transport_cost(destination: str) -> tuple[float, float]:
     """
-    Výpočet vzdálenosti a ceny dopravy (Blučina ↔ destination)
-    Cena = vzdálenost * 2 * 15 Kč/km
+    Vrátí (vzdálenost_km, cena_dopravy)
+    Cena = vzdálenost × 2 × 150 Kč
     """
     try:
         gmaps = googlemaps.Client(key=st.secrets["GOOGLE_API_KEY"])
         origin = "Blučina, Česká republika"
-        log(f"🚗 Výpočet trasy: {origin} -> {destination}")
         res = gmaps.distance_matrix(origins=[origin], destinations=[destination], mode="driving")
         distance_m = res["rows"][0]["elements"][0]["distance"]["value"]
         distance_km = distance_m / 1000
-        cost = distance_km * 2 * 15
-        log(f"📏 Vzdálenost {distance_km:.1f} km, cena {cost:.0f} Kč")
+        cost = distance_km * 2 * 150
+        log(f"📏 Vzdálenost {distance_km:.1f} km → Doprava {cost:.0f} Kč")
         return distance_km, cost
     except Exception as e:
         log(f"❌ Chyba při výpočtu dopravy: {e}")
@@ -157,24 +153,19 @@ def load_all_ceniky():
         if mat is None or mat.empty: continue
         st.session_state.CENIKY[name.lower()] = mat
         st.session_state.PRODUKTY.append(name)
-        log(f"📏 {name}: {mat.shape[1]} šířek × {mat.shape[0]} výšek")
 
-colA, colB = st.columns([1,1])
-with colA:
-    if st.button("♻️ Znovu načíst ceníky"):
-        load_all_ceniky()
 if not st.session_state.CENIKY:
     load_all_ceniky()
 
 # ===============================
-# VÝPOČET CEN – GPT
+# HLAVNÍ VÝPOČET
 # ===============================
 st.markdown("---")
 st.subheader("📝 Textová poptávka (včetně montáže a adresy)")
 
 with st.form("calc_form"):
     user_text = st.text_area("Zadej kompletní poptávku:", height=120,
-        placeholder="např. ALUX Bioclimatic 6000x4500, screen 3000x2500, montáž 13 %, adresa Praha")
+        placeholder="např. ALUX Bioclimatic 6000x4500, screen 3000x2500, montáž 14 %, adresa Praha")
     submitted = st.form_submit_button("📤 ODESLAT")
 
 if submitted and user_text.strip():
@@ -185,10 +176,9 @@ if submitted and user_text.strip():
     system_prompt = (
         "Z následujícího textu vytěž strukturovaná data ve formátu JSON. "
         "Rozpoznej všechny položky s názvem produktu (z tohoto seznamu: "
-        f"{product_list}), šířkou (mm), výškou/hloubkou (mm), "
-        "dále rozpoznej případnou položku 'montáž' (procento) a 'adresa' (text). "
-        "Rozměry jako 3500x2500 převáděj na čísla. "
-        "Vrať pouze validní JSON objekt se strukturou:\n"
+        f"{product_list}), šířkou (mm), výškou (mm), "
+        "dále položku 'montáž' (procento) a 'adresa' (text). "
+        "Vrať pouze validní JSON objekt:\n"
         "{"
         "\"polozky\": [{\"produkt\":\"...\",\"šířka\":...,\"hloubka_výška\":...}], "
         "\"montáž_procent\": 12, "
@@ -231,9 +221,7 @@ if submitted and user_text.strip():
             log(f"❌ Ceník nenalezen: {produkt}")
             continue
         use_w, use_h, price = find_price(df_mat, w, h)
-        if pd.isna(price):
-            log(f"⚠️ {produkt}: buňka NaN")
-            continue
+        if pd.isna(price): continue
         results.append({
             "Produkt": produkt,
             "Rozměr (požadovaný)": f"{w}×{h}",
@@ -253,7 +241,6 @@ if submitted and user_text.strip():
             assembly_rates = [montaz_pct]
         else:
             assembly_rates = [12, 13, 14, 15]
-
         assembly_data = [
             {"Varianta montáže": f"{r} %", "Cena montáže (Kč)": round(total_price * r / 100, 2)}
             for r in assembly_rates
@@ -269,7 +256,7 @@ if submitted and user_text.strip():
         st.markdown("### 🚚 Doprava a montáž")
         st.write(f"**Adresa:** {destination or 'neuvedena'}")
         if destination:
-            st.write(f"**Doprava:** {distance_km:.1f} km × 2 × 15 Kč = **{cost_transport:.0f} Kč**")
+            st.write(f"**Doprava:** {distance_km:.1f} km × 2 × 150 Kč = **{cost_transport:.0f} Kč**")
         st.dataframe(pd.DataFrame(assembly_data), use_container_width=True)
 
         st.markdown("---")
