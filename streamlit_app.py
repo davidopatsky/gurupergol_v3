@@ -10,7 +10,7 @@ from datetime import datetime
 # ZÁKLADNÍ NASTAVENÍ
 # ==========================================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – zjednodušená verze")
+st.title("🧠 Cenový asistent – zjednodušená stabilní verze")
 
 SEZNAM_PATH = os.path.join(os.path.dirname(__file__), "seznam_ceniku.txt")
 ORIGIN = "Blučina, Česká republika"
@@ -37,9 +37,9 @@ def log(msg: str):
 
 def show_log_sidebar():
     with st.sidebar:
-        st.markdown("### 🪵 Log")
-        with st.expander("Zobrazit / skrýt log", expanded=False):
-            st.text_area("Výpis", "\n".join(st.session_state.LOG), height=600)
+        st.markdown("### 🪵 Log výpočtů")
+        with st.expander("Zobrazit / skrýt", expanded=False):
+            st.text_area("Log", "\n".join(st.session_state.LOG), height=600)
 
 # ==========================================
 # FUNKCE PRO CENÍKY
@@ -96,21 +96,36 @@ def load_ceniky(force=False):
 # FUNKCE PRO CENY
 # ==========================================
 def nearest_ge(values, want):
-    vals = sorted([int(v) for v in values])
+    vals = sorted([int(float(v)) for v in values])
     for v in vals:
         if v >= want:
             return v
     return vals[-1]
 
 def find_price(df, w, h):
-    """Najde cenu podle nejbližší vyšší šířky a výšky."""
-    cols = sorted([int(c) for c in df.columns])
-    rows = sorted([int(r) for r in df.index])
-    use_w = nearest_ge(cols, w)
-    use_h = nearest_ge(rows, h)
-    price = df.loc[use_h, use_w]
-    log(f"🔢 Cena {use_w}×{use_h} = {price}")
-    return use_w, use_h, price
+    """Najde cenu podle nejbližší vyšší šířky a výšky (toleruje floaty i stringy)."""
+    try:
+        cols = sorted([int(float(c)) for c in df.columns])
+        rows = sorted([int(float(r)) for r in df.index])
+
+        use_w = nearest_ge(cols, w)
+        use_h = nearest_ge(rows, h)
+
+        # bezpečné načtení (někdy index/columns jsou stringy)
+        price = None
+        if use_h in df.index and use_w in df.columns:
+            price = df.loc[use_h, use_w]
+        elif str(use_h) in df.index and str(use_w) in df.columns:
+            price = df.loc[str(use_h), str(use_w)]
+        elif str(float(use_h)) in df.index and str(float(use_w)) in df.columns:
+            price = df.loc[str(float(use_h)), str(float(use_w))]
+
+        log(f"🔢 Cena {use_w}×{use_h} = {price}")
+        return use_w, use_h, price
+
+    except Exception as e:
+        log(f"❌ Chyba ve find_price: {e}")
+        return None, None, None
 
 def calculate_transport_cost(destination: str):
     try:
@@ -175,10 +190,7 @@ with st.expander("📂 Zobrazit všechny načtené ceníky", expanded=False):
 # ---- Formulář ----
 st.markdown("---")
 st.subheader("📝 Zadej text poptávky")
-user_text = st.text_area(
-    "Např.: ALUX Thermo 6000x4500, Praha",
-    height=100
-)
+user_text = st.text_area("Např.: ALUX Thermo 6000x4500, Praha", height=100)
 
 if st.button("📤 Spočítat"):
     st.session_state.LOG.clear()
@@ -200,6 +212,9 @@ if st.button("📤 Spočítat"):
             log(f"❌ Nenalezen ceník: {produkt}")
             continue
         use_w, use_h, price = find_price(df, w, h)
+        if price is None:
+            log(f"⚠️ {produkt}: cena nenalezena.")
+            continue
         total += float(price)
         rows.append([produkt, f"{w}×{h}", f"{use_w}×{use_h}", int(price)])
 
