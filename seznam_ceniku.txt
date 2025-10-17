@@ -1,7 +1,13 @@
-ALUX Bioclimatic – https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_CHUuFGLItFD-2lpokd9vOecKiY3Z93sW6rSsU2zjQnHhRIiTdRGd0DO9yhItqg/pub?output=csv
-screen - https://docs.google.com/spreadsheets/d/e/2PACX-1vTRe-cDxp9cslPmA5EhtQ_KBgEOWfOGF7wj5G2yEVo1pQ6kWnqu8V41C3gRSnrlrA/pub?output=csv
-ALUX Thermo - https://docs.google.com/spreadsheets/d/e/2PACX-1vR9khLV8DugttSfvjuof5jTNnGMXae_F75RmQxZNTO3C7Pby462qcfL-NsatB28cg/pub?output=csv
-ALUX Glass - https://docs.google.com/spreadsheets/d/e/2PACX-1vT84WzHwGWBYUl8SuahaQ2IaxJAvgQVywsVagNCWKNUjfzI_y56zPXvATUkRfRihg/pub?output=csv
-Strada Carbo - https://docs.google.com/spreadsheets/d/e/2PACX-1vS2RYsAlmSa-gEldZV7nlrYON2y2IJW5_GvfzncFRdTcraQMTSPNTBQVhovZUpYqw/pub?output=csv
-ALUX CARBO TRAPEZ - https://docs.google.com/spreadsheets/d/e/2PACX-1vSQ_b1v1YMgknWa1uN3ITKkzFkzP1qTj3Db4Ua_IZnUwD_--OT_n3xc3111z7gAKA/pub?output=csv
-Strada Glass - https://docs.google.com/spreadsheets/d/e/2PACX-1vQSMuGOzj_oEQGLvYHLgZc-shpLXdcRfnPEEfN_u7aDYJn2z-SaA7QPD2GyKAmLYQ/pub?output=csv
+ALUX Bioclimatic = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_CHUuFGLItFD-2lpokd9vOecKiY3Z93sW6rSsU2zjQnHhRIiTdRGd0DO9yhItqg/pub?output=csv"
+
+screen = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTRe-cDxp9cslPmA5EhtQ_KBgEOWfOGF7wj5G2yEVo1pQ6kWnqu8V41C3gRSnrlrA/pub?output=csv"
+
+ALUX Thermo = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9khLV8DugttSfvjuof5jTNnGMXae_F75RmQxZNTO3C7Pby462qcfL-NsatB28cg/pub?output=csv"
+
+ALUX Glass = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT84WzHwGWBYUl8SuahaQ2IaxJAvgQVywsVagNCWKNUjfzI_y56zPXvATUkRfRihg/pub?output=csv"
+
+Strada Carbo = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2RYsAlmSa-gEldZV7nlrYON2y2IJW5_GvfzncFRdTcraQMTSPNTBQVhovZUpYqw/pub?output=csv"
+
+ALUX CARBO TRAPEZ = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQ_b1v1YMgknWa1uN3ITKkzFkzP1qTj3Db4Ua_IZnUwD_--OT_n3xc3111z7gAKA/pub?output=csv"
+
+Strada Glass = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSMuGOzj_oEQGLvYHLgZc-shpLXdcRfnPEEfN_u7aDYJn2z-SaA7QPD2GyKAmLYQ/pub?output=csv"
