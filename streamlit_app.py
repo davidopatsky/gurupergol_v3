@@ -10,7 +10,7 @@ from datetime import datetime
 # ZÁKLADNÍ NASTAVENÍ
 # ==========================================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – zjednodušená stabilní verze")
+st.title("🧠 Cenový asistent – finální verze")
 
 SEZNAM_PATH = os.path.join(os.path.dirname(__file__), "seznam_ceniku.txt")
 ORIGIN = "Blučina, Česká republika"
@@ -96,22 +96,25 @@ def load_ceniky(force=False):
 # FUNKCE PRO CENY
 # ==========================================
 def nearest_ge(values, want):
-    vals = sorted([int(float(v)) for v in values])
+    vals = sorted([int(float(v)) for v in values if pd.notna(v)])
     for v in vals:
         if v >= want:
             return v
     return vals[-1]
 
 def find_price(df, w, h):
-    """Najde cenu podle nejbližší vyšší šířky a výšky (toleruje floaty i stringy)."""
+    """Najde cenu podle nejbližší vyšší šířky a výšky (toleruje floaty i stringy, ignoruje NaN)."""
     try:
-        cols = sorted([int(float(c)) for c in df.columns])
-        rows = sorted([int(float(r)) for r in df.index])
+        cols = sorted([int(float(c)) for c in df.columns if pd.notna(c)])
+        rows = sorted([int(float(r)) for r in df.index if pd.notna(r)])
+
+        if not cols or not rows:
+            log("⚠️ find_price: prázdné osy.")
+            return None, None, None
 
         use_w = nearest_ge(cols, w)
         use_h = nearest_ge(rows, h)
 
-        # bezpečné načtení (někdy index/columns jsou stringy)
         price = None
         if use_h in df.index and use_w in df.columns:
             price = df.loc[use_h, use_w]
@@ -212,7 +215,7 @@ if st.button("📤 Spočítat"):
             log(f"❌ Nenalezen ceník: {produkt}")
             continue
         use_w, use_h, price = find_price(df, w, h)
-        if price is None:
+        if price is None or pd.isna(price):
             log(f"⚠️ {produkt}: cena nenalezena.")
             continue
         total += float(price)
