@@ -10,7 +10,7 @@ from io import StringIO
 # ZÁKLAD
 # ===============================
 st.set_page_config(page_title="Cenový asistent", layout="wide")
-st.title("🧠 Cenový asistent – doprava + montáže (robustní osy)")
+st.title("🧠 Cenový asistent od Davida")
 
 # Session
 if "LOG" not in st.session_state:
